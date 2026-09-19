@@ -6,7 +6,10 @@ import { DORM_OPTIONS, GRADE_OPTIONS } from "./types";
 const REQUIRED_COLUMNS = ["選手名", "検査日"];
 const METADATA_COLUMNS = new Set(["選手名", "検査日", "寮", "学年"]);
 const DORM_VALUES = new Set<string>(DORM_OPTIONS);
-const GRADE_VALUES = new Set<string>(GRADE_OPTIONS);
+// "高校生" marks a test taken before the player enrolled (recruiting-era data) -
+// kept in Notion for reference but outside the 1-4年 dashboard filters.
+const HIGH_SCHOOL_GRADE = "高校生";
+const GRADE_VALUES = new Set<string>([...GRADE_OPTIONS, HIGH_SCHOOL_GRADE]);
 
 export interface ImportSummary {
   paramColumns: string[];
@@ -171,7 +174,7 @@ export async function importBloodCsv(
   if (columns.includes("学年") && !existingProps.has("学年")) {
     missingSelectProps["学年"] = {
       type: "select",
-      select: { options: GRADE_OPTIONS.map((name) => ({ name })) },
+      select: { options: [...GRADE_OPTIONS, HIGH_SCHOOL_GRADE].map((name) => ({ name })) },
     };
   }
   // Shown to the caller as "properties about to be added" - kept separate
