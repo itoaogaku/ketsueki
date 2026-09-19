@@ -8,6 +8,8 @@ import { CorrelationScatter } from "./CorrelationScatter";
 import { DataTable } from "./DataTable";
 import { GradeTable } from "./GradeTable";
 import { GroupComparisonSection } from "./GroupComparisonSection";
+import { PlayerHistoryTable } from "./PlayerHistoryTable";
+import { DateLookupTable } from "./DateLookupTable";
 import {
   computeAllCorrelations,
   computeCorrelation,
@@ -166,6 +168,10 @@ export function Dashboard({
         </h2>
         <GradeTable bloodData={bloodData} />
       </section>
+
+      <PlayerHistoryTable bloodData={bloodData} />
+
+      <DateLookupTable bloodData={bloodData} />
 
       {/* Filters */}
       <section

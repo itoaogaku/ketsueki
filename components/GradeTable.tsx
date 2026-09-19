@@ -2,10 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { academicYear } from "@/lib/stats";
-import { orderParametersByCategory } from "@/lib/parameter-categories";
-import { classifyValue } from "@/lib/reference-ranges";
 import { GRADE_OPTIONS } from "@/lib/types";
 import type { BloodDataResponse, Grade } from "@/lib/types";
+import { WideTestTable } from "./WideTestTable";
 
 export function GradeTable({ bloodData }: { bloodData: BloodDataResponse }) {
   const gradedRecords = useMemo(
@@ -38,12 +37,6 @@ export function GradeTable({ bloodData }: { bloodData: BloodDataResponse }) {
     return Array.from(byPlayer.entries())
       .map(([player, records]) => ({ player, records }))
       .sort((a, b) => a.player.localeCompare(b.player, "ja"));
-  }, [filtered]);
-
-  const parameterGroups = useMemo(() => {
-    const params = new Set<string>();
-    filtered.forEach((r) => Object.keys(r.values).forEach((k) => params.add(k)));
-    return orderParametersByCategory(Array.from(params));
   }, [filtered]);
 
   const totalColumns = players.reduce((s, p) => s + p.records.length, 0);
@@ -93,131 +86,11 @@ export function GradeTable({ bloodData }: { bloodData: BloodDataResponse }) {
           この年度・学年に該当する検査データがありません。
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid var(--border)" }}>
-          <table className="text-xs" style={{ borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th
-                  className="sticky left-0 z-10 px-2 py-1 text-left"
-                  style={{ background: "var(--surface-1)", borderBottom: "1px solid var(--border)" }}
-                />
-                {players.map((p) => (
-                  <th
-                    key={p.player}
-                    colSpan={p.records.length}
-                    className="whitespace-nowrap px-2 py-1 text-center font-medium"
-                    style={{
-                      background: "var(--surface-1)",
-                      borderBottom: "1px solid var(--border)",
-                      borderLeft: "1px solid var(--border)",
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    {p.player}
-                  </th>
-                ))}
-              </tr>
-              <tr>
-                <th
-                  className="sticky left-0 z-10 px-2 py-1 text-left"
-                  style={{ background: "var(--surface-1)", borderBottom: "1px solid var(--border)" }}
-                >
-                  検査項目
-                </th>
-                {players.flatMap((p) =>
-                  p.records.map((r) => (
-                    <th
-                      key={r.id}
-                      className="whitespace-nowrap px-2 py-1 text-center font-normal"
-                      style={{
-                        background: "var(--surface-1)",
-                        borderBottom: "1px solid var(--border)",
-                        borderLeft: "1px solid var(--gridline)",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      {r.date}
-                    </th>
-                  ))
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {parameterGroups.map((group) => (
-                <RowGroup key={group.category} group={group} players={players} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <WideTestTable
+          groups={players.map((p) => ({ label: p.player, records: p.records }))}
+        />
       )}
     </div>
-  );
-}
-
-function RowGroup({
-  group,
-  players,
-}: {
-  group: { category: string; params: string[] };
-  players: { player: string; records: { id: string; values: Record<string, number> }[] }[];
-}) {
-  return (
-    <>
-      <tr>
-        <td
-          colSpan={1 + players.reduce((s, p) => s + p.records.length, 0)}
-          className="px-2 py-1 font-medium"
-          style={{
-            background: "var(--background)",
-            color: "var(--text-secondary)",
-            borderTop: "1px solid var(--border)",
-            borderBottom: "1px solid var(--border)",
-          }}
-        >
-          {group.category}
-        </td>
-      </tr>
-      {group.params.map((param) => (
-        <tr key={param}>
-          <td
-            className="sticky left-0 z-10 whitespace-nowrap px-2 py-1"
-            style={{
-              background: "var(--surface-1)",
-              borderBottom: "1px solid var(--gridline)",
-              color: "var(--text-primary)",
-            }}
-          >
-            {param}
-          </td>
-          {players.flatMap((p) =>
-            p.records.map((r) => {
-              const value = r.values[param];
-              const cls = typeof value === "number" ? classifyValue(param, value) : null;
-              return (
-                <td
-                  key={r.id}
-                  className="whitespace-nowrap px-2 py-1 text-right"
-                  style={{
-                    borderBottom: "1px solid var(--gridline)",
-                    borderLeft: "1px solid var(--gridline)",
-                    fontVariantNumeric: "tabular-nums",
-                    color:
-                      cls === "high"
-                        ? "var(--status-critical)"
-                        : cls === "low"
-                          ? "var(--series-1)"
-                          : "var(--text-primary)",
-                    fontWeight: cls ? 600 : 400,
-                  }}
-                >
-                  {value ?? ""}
-                </td>
-              );
-            })
-          )}
-        </tr>
-      ))}
-    </>
   );
 }
 
