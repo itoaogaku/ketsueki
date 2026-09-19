@@ -155,12 +155,34 @@ export async function importBloodCsv(
   const notion = getNotionClient();
   const dataSourceId = await resolveDataSourceId(bloodDbId);
 
-  // Add any parameter columns that don't exist yet as Number properties.
+  // Add any parameter columns that don't exist yet as Number properties, and
+  // 寮/学年 as Select properties (with their known options) if the CSV uses
+  // them but the database predates that column - e.g. 学年 was added to the
+  // schema after some databases were already created from CSVs without it.
   const dataSource = await notion.dataSources.retrieve({ data_source_id: dataSourceId });
   const existingProps = new Set(Object.keys(dataSource.properties));
   const addedProperties = paramColumns.filter((c) => !existingProps.has(c));
-  if (addedProperties.length > 0 && !dryRun) {
-    const properties: Record<string, { type: "number"; number: { format: string } }> = {};
+
+  const missingSelectProps: Record<string, { type: "select"; select: { options: { name: string }[] } }> =
+    {};
+  if (columns.includes("寮") && !existingProps.has("寮")) {
+    missingSelectProps["寮"] = { type: "select", select: { options: DORM_OPTIONS.map((name) => ({ name })) } };
+    addedProperties.push("寮");
+  }
+  if (columns.includes("学年") && !existingProps.has("学年")) {
+    missingSelectProps["学年"] = {
+      type: "select",
+      select: { options: GRADE_OPTIONS.map((name) => ({ name })) },
+    };
+    addedProperties.push("学年");
+  }
+
+  if ((addedProperties.length > 0 || Object.keys(missingSelectProps).length > 0) && !dryRun) {
+    const properties: Record<
+      string,
+      | { type: "number"; number: { format: string } }
+      | { type: "select"; select: { options: { name: string }[] } }
+    > = { ...missingSelectProps };
     for (const name of addedProperties) {
       properties[name] = { type: "number", number: { format: "number" } };
     }
