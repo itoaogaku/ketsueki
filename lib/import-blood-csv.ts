@@ -161,29 +161,31 @@ export async function importBloodCsv(
   // schema after some databases were already created from CSVs without it.
   const dataSource = await notion.dataSources.retrieve({ data_source_id: dataSourceId });
   const existingProps = new Set(Object.keys(dataSource.properties));
-  const addedProperties = paramColumns.filter((c) => !existingProps.has(c));
+  const numberProperties = paramColumns.filter((c) => !existingProps.has(c));
 
   const missingSelectProps: Record<string, { type: "select"; select: { options: { name: string }[] } }> =
     {};
   if (columns.includes("寮") && !existingProps.has("寮")) {
     missingSelectProps["寮"] = { type: "select", select: { options: DORM_OPTIONS.map((name) => ({ name })) } };
-    addedProperties.push("寮");
   }
   if (columns.includes("学年") && !existingProps.has("学年")) {
     missingSelectProps["学年"] = {
       type: "select",
       select: { options: GRADE_OPTIONS.map((name) => ({ name })) },
     };
-    addedProperties.push("学年");
   }
+  // Shown to the caller as "properties about to be added" - kept separate
+  // from `numberProperties` below so building the Number-type payload can't
+  // accidentally re-list (and overwrite as Number) a Select property here.
+  const addedProperties = [...numberProperties, ...Object.keys(missingSelectProps)];
 
-  if ((addedProperties.length > 0 || Object.keys(missingSelectProps).length > 0) && !dryRun) {
+  if ((numberProperties.length > 0 || Object.keys(missingSelectProps).length > 0) && !dryRun) {
     const properties: Record<
       string,
       | { type: "number"; number: { format: string } }
       | { type: "select"; select: { options: { name: string }[] } }
     > = { ...missingSelectProps };
-    for (const name of addedProperties) {
+    for (const name of numberProperties) {
       properties[name] = { type: "number", number: { format: "number" } };
     }
     await notion.dataSources.update({ data_source_id: dataSourceId, properties });
