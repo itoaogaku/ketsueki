@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { StatTile } from "./StatTile";
 import { TrendLineChart } from "./TrendLineChart";
@@ -102,12 +103,23 @@ export function Dashboard({
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-8">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-          血液検査データ分析ダッシュボード
-        </h1>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          選手の血液検査データの推移と、1寮生・2寮生の違い、試合結果との相関を確認できます。
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+              血液検査データ分析ダッシュボード
+            </h1>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              選手の血液検査データの推移と、1寮生・2寮生の違い、試合結果との相関を確認できます。
+            </p>
+          </div>
+          <Link
+            href="/import"
+            className="rounded px-3 py-2 text-sm font-medium"
+            style={{ background: "var(--series-1)", color: "#ffffff" }}
+          >
+            CSVインポート
+          </Link>
+        </div>
         <SourceBadge blood={bloodData.source} games={gameData.source} />
       </header>
 

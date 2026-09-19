@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { ImportSummary } from "@/lib/import-blood-csv";
 
@@ -39,6 +40,9 @@ export default function ImportPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
       <header className="space-y-1">
+        <Link href="/" className="text-sm" style={{ color: "var(--series-1)" }}>
+          ← ダッシュボードに戻る
+        </Link>
         <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
           血液検査データCSVインポート
         </h1>
