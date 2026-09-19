@@ -6,6 +6,7 @@ import { StatTile } from "./StatTile";
 import { TrendLineChart } from "./TrendLineChart";
 import { CorrelationScatter } from "./CorrelationScatter";
 import { DataTable } from "./DataTable";
+import { GradeTable } from "./GradeTable";
 import {
   computeAllCorrelations,
   computeCorrelation,
@@ -122,6 +123,14 @@ export function Dashboard({
         </div>
         <SourceBadge blood={bloodData.source} games={gameData.source} />
       </header>
+
+      {/* Grade view: reproduces the original spreadsheet's per-grade wide table */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
+          学年別一覧
+        </h2>
+        <GradeTable bloodData={bloodData} />
+      </section>
 
       {/* Filters */}
       <section

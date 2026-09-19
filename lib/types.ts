@@ -2,12 +2,17 @@ export type Dorm = "1寮生" | "2寮生";
 
 export const DORM_OPTIONS: Dorm[] = ["1寮生", "2寮生"];
 
+export type Grade = "1年" | "2年" | "3年" | "4年";
+
+export const GRADE_OPTIONS: Grade[] = ["1年", "2年", "3年", "4年"];
+
 /** One blood-test record for one player on one date. */
 export interface BloodTestRecord {
   id: string;
   player: string;
   date: string; // ISO yyyy-mm-dd
   dorm: Dorm | null;
+  grade: Grade | null;
   /** blood parameter name -> numeric value, e.g. { "Hb": 15.2, "Fe": 88 } */
   values: Record<string, number>;
 }

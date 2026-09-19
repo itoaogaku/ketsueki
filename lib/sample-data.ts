@@ -1,4 +1,6 @@
-import type { BloodTestRecord, Dorm, GameResultRecord } from "./types";
+import type { BloodTestRecord, Dorm, GameResultRecord, Grade } from "./types";
+
+const GRADES: Grade[] = ["1年", "2年", "3年", "4年"];
 
 // Deterministic PRNG so the demo dataset looks the same on every request
 // (each generator below creates its own instance rather than sharing one,
@@ -34,6 +36,7 @@ const MONTHS = ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09"
 interface PlayerProfile {
   name: string;
   dorm: Dorm;
+  grade: Grade;
   baseHb: number;
   baseFe: number;
   baseCK: number;
@@ -50,6 +53,7 @@ function buildPlayers(gaussian: ReturnType<typeof makeGaussian>): PlayerProfile[
     return {
       name: `${name}選手`,
       dorm,
+      grade: GRADES[i % GRADES.length],
       baseHb: gaussian(14.6 + dormBoost * 0.5, 0.6),
       baseFe: gaussian(95 + dormBoost * 15, 15),
       baseCK: gaussian(280 - dormBoost * 40, 40),
@@ -77,12 +81,16 @@ export function generateSampleBloodData(): BloodTestRecord[] {
         player: p.name,
         date: `${month}-15`,
         dorm: p.dorm,
+        grade: p.grade,
         values: {
-          "Hb(ヘモグロビン)": round(gaussian(p.baseHb - mIdx * 0.03, 0.3), 1),
-          "Fe(血清鉄)": round(gaussian(p.baseFe - fatigue, 10), 0),
-          "CK(クレアチンキナーゼ)": round(gaussian(p.baseCK + fatigue * 3, 30), 0),
-          "フェリチン": round(gaussian(p.baseFerritin - fatigue * 0.5, 12), 0),
-          "総タンパク(TP)": round(gaussian(p.baseTP, 0.2), 1),
+          // Real Notion property names (matching what the CSV import/reference
+          // ranges use), so the sample dataset colors and behaves the same
+          // way real data would.
+          "Hb（ヘモグロビン量）": round(gaussian(p.baseHb - mIdx * 0.03, 0.3), 1),
+          "Fe（血清鉄）": round(gaussian(p.baseFe - fatigue, 10), 0),
+          "CK（クレアチンキナーゼ）": round(gaussian(p.baseCK + fatigue * 3, 30), 0),
+          "フェリチン(Ferritin) (※フェリチン精密)": round(gaussian(p.baseFerritin - fatigue * 0.5, 12), 0),
+          総蛋白: round(gaussian(p.baseTP, 0.2), 1),
         },
       });
     });

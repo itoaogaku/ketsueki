@@ -19,10 +19,11 @@ export async function POST(request: NextRequest) {
     }
 
     const dryRun = formData.get("dryRun") === "true";
+    const mode = formData.get("mode") === "upsert" ? "upsert" : "create";
     const maxCreateRaw = formData.get("maxCreate");
     const maxCreate = typeof maxCreateRaw === "string" ? Number(maxCreateRaw) : undefined;
     const csvText = await file.text();
-    const summary = await importBloodCsv(csvText, { dryRun, maxCreate });
+    const summary = await importBloodCsv(csvText, { dryRun, mode, maxCreate });
     return NextResponse.json({ summary });
   } catch (error) {
     console.error("Failed to import blood-test CSV", error);

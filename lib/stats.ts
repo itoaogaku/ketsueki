@@ -10,6 +10,14 @@ export function monthKey(dateStr: string): string {
   return dateStr.slice(0, 7); // "yyyy-MM"
 }
 
+/** Japanese academic year (April-March): a date in Jan-Mar belongs to the
+ * academic year that started the previous April. */
+export function academicYear(dateStr: string): number {
+  const year = Number(dateStr.slice(0, 4));
+  const month = Number(dateStr.slice(5, 7));
+  return month >= 4 ? year : year - 1;
+}
+
 export interface TrendFilter {
   parameter: string;
   dorm?: Dorm | "all";

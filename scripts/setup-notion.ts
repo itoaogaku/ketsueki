@@ -51,6 +51,17 @@ async function main() {
             options: [{ name: "1寮生", color: "blue" }, { name: "2寮生", color: "orange" }],
           },
         },
+        学年: {
+          type: "select",
+          select: {
+            options: [
+              { name: "1年", color: "green" },
+              { name: "2年", color: "blue" },
+              { name: "3年", color: "yellow" },
+              { name: "4年", color: "red" },
+            ],
+          },
+        },
       },
     },
   });

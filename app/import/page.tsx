@@ -15,6 +15,7 @@ export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [secret, setSecret] = useState("");
   const [dryRun, setDryRun] = useState(true);
+  const [upsert, setUpsert] = useState(false);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,16 +28,17 @@ export default function ImportPage() {
     try {
       // Only rows newly processed in a given round reach the dorm/value
       // checks (a row already written in an earlier round is now detected
-      // as a duplicate and short-circuits before those checks run again),
-      // so `missingDorm`, `warnings`, and `addedProperties` are each a
-      // per-round partial result that must be combined across rounds. And
-      // `skippedDuplicate` can't be combined at all: each round re-scans
-      // the whole file from row one, so a row this same import already
-      // wrote in an earlier round shows up as a duplicate again on every
-      // later round - the true count is derived from `totalRows` instead,
-      // which (like `skippedInvalid`) is a fixed property of the file and
-      // doesn't grow with the round count.
+      // and short-circuits before those checks run again), so `missingDorm`,
+      // `warnings`, and `addedProperties` are each a per-round partial
+      // result that must be combined across rounds. And `skippedDuplicate`
+      // can't be combined at all: each round re-scans the whole file from
+      // row one, so a row this same import already wrote in an earlier
+      // round shows up as a duplicate again on every later round - the true
+      // count is derived from `totalRows` instead, which (like
+      // `skippedInvalid`) is a fixed property of the file and doesn't grow
+      // with the round count.
       let totalCreated = 0;
+      let totalUpdated = 0;
       let totalMissingDorm = 0;
       const allWarnings: string[] = [];
       const addedPropertiesSoFar: string[] = [];
@@ -45,6 +47,7 @@ export default function ImportPage() {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("dryRun", String(dryRun));
+        formData.append("mode", upsert ? "upsert" : "create");
         if (secret) formData.append("secret", secret);
         if (!dryRun) formData.append("maxCreate", String(BATCH_SIZE));
 
@@ -57,6 +60,7 @@ export default function ImportPage() {
 
         const roundSummary: ImportSummary = data.summary;
         totalCreated += roundSummary.created;
+        totalUpdated += roundSummary.updated;
         totalMissingDorm += roundSummary.missingDorm;
         allWarnings.push(...roundSummary.warnings);
         for (const p of roundSummary.addedProperties) {
@@ -66,10 +70,12 @@ export default function ImportPage() {
         setSummary({
           ...roundSummary,
           created: totalCreated,
+          updated: totalUpdated,
           missingDorm: totalMissingDorm,
           warnings: allWarnings,
           addedProperties: addedPropertiesSoFar,
-          skippedDuplicate: roundSummary.totalRows - totalCreated - roundSummary.skippedInvalid,
+          skippedDuplicate:
+            roundSummary.totalRows - totalCreated - totalUpdated - roundSummary.skippedInvalid,
         });
 
         if (!roundSummary.hasMore) break;
@@ -92,7 +98,7 @@ export default function ImportPage() {
         </h1>
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
           CSVファイルをアップロードすると、Notionの血液検査データベースに取り込みます。
-          「選手名」「検査日」は必須列、「寮」は任意、それ以外の列は検査項目として自動認識されます。
+          「選手名」「検査日」は必須列、「寮」「学年」は任意、それ以外の列は検査項目として自動認識されます。
         </p>
       </header>
 
@@ -131,6 +137,11 @@ export default function ImportPage() {
           まず内容を確認する（Notionへは書き込みません）
         </label>
 
+        <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+          <input type="checkbox" checked={upsert} onChange={(e) => setUpsert(e.target.checked)} />
+          既存の行も上書きする（学年など、後から追加した列を反映したいときに使用）
+        </label>
+
         <button
           type="button"
           onClick={submit}
@@ -140,7 +151,7 @@ export default function ImportPage() {
         >
           {loading
             ? summary
-              ? `処理中... (${summary.created}件作成)`
+              ? `処理中... (${summary.created + summary.updated}件処理)`
               : "処理中..."
             : dryRun
               ? "内容を確認"
@@ -175,7 +186,12 @@ export default function ImportPage() {
           )}
           <ul className="space-y-1" style={{ color: "var(--text-primary)" }}>
             <li>{summary.dryRun ? "作成予定" : "作成"}: {summary.created}件</li>
-            <li>重複のためスキップ: {summary.skippedDuplicate}件</li>
+            {summary.mode === "upsert" && (
+              <li>{summary.dryRun ? "更新予定" : "更新"}: {summary.updated}件</li>
+            )}
+            {summary.mode === "create" && (
+              <li>重複のためスキップ: {summary.skippedDuplicate}件</li>
+            )}
             <li>不正な行のためスキップ: {summary.skippedInvalid}件</li>
             {summary.missingDorm > 0 && <li>寮が未記入の行: {summary.missingDorm}件</li>}
           </ul>

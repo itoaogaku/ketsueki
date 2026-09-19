@@ -7,6 +7,7 @@ import type {
   Dorm,
   GameResultRecord,
   GameResultsResponse,
+  Grade,
 } from "./types";
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
@@ -87,6 +88,7 @@ function extractBloodRecord(page: PageObjectResponse): BloodTestRecord {
   const player = getPlainTitle(page);
   let date = "";
   let dorm: Dorm | null = null;
+  let grade: Grade | null = null;
   const values: Record<string, number> = {};
 
   for (const [name, prop] of Object.entries(page.properties)) {
@@ -95,12 +97,15 @@ function extractBloodRecord(page: PageObjectResponse): BloodTestRecord {
     } else if (prop.type === "select" && /寮/.test(name)) {
       const opt = prop.select?.name;
       if (opt === "1寮生" || opt === "2寮生") dorm = opt;
+    } else if (prop.type === "select" && /学年/.test(name)) {
+      const opt = prop.select?.name;
+      if (opt === "1年" || opt === "2年" || opt === "3年" || opt === "4年") grade = opt;
     } else if (prop.type === "number" && typeof prop.number === "number") {
       values[name] = prop.number;
     }
   }
 
-  return { id: page.id, player, date, dorm, values };
+  return { id: page.id, player, date, dorm, grade, values };
 }
 
 function extractGameRecord(page: PageObjectResponse): GameResultRecord {
