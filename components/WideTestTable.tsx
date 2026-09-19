@@ -23,7 +23,12 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
   return (
     <div
       className="overflow-auto rounded-lg"
-      style={{ border: "1px solid var(--border)", maxHeight: "70vh" }}
+      style={{
+        border: "1px solid var(--border)",
+        maxHeight: "91vh", // 70vh x1.3
+        width: "130%",
+        marginLeft: "-15%",
+      }}
     >
       <table className="text-xs" style={{ borderCollapse: "collapse" }}>
         <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
