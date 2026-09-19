@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# real player data (names + health data) - never commit to git,
+# only used locally / passed to npm run import:csv
+/data/imports/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
