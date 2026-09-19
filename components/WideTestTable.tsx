@@ -25,9 +25,10 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
       className="overflow-auto rounded-lg"
       style={{
         border: "1px solid var(--border)",
-        maxHeight: "91vh", // 70vh x1.3
+        maxHeight: "calc(91vh - 1.5cm)",
         width: "130%",
         marginLeft: "-15%",
+        background: "var(--surface-1)",
       }}
     >
       <table className="text-xs" style={{ borderCollapse: "collapse" }}>
