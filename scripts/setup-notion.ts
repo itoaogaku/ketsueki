@@ -48,7 +48,7 @@ async function main() {
         寮: {
           type: "select",
           select: {
-            options: [{ name: "1軍寮", color: "blue" }, { name: "2軍寮", color: "orange" }],
+            options: [{ name: "1寮生", color: "blue" }, { name: "2寮生", color: "orange" }],
           },
         },
       },

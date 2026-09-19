@@ -94,7 +94,7 @@ function extractBloodRecord(page: PageObjectResponse): BloodTestRecord {
       date = prop.date.start.slice(0, 10);
     } else if (prop.type === "select" && /寮/.test(name)) {
       const opt = prop.select?.name;
-      if (opt === "1軍寮" || opt === "2軍寮") dorm = opt;
+      if (opt === "1寮生" || opt === "2寮生") dorm = opt;
     } else if (prop.type === "number" && typeof prop.number === "number") {
       values[name] = prop.number;
     }

@@ -106,7 +106,7 @@ export function Dashboard({
           血液検査データ分析ダッシュボード
         </h1>
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          選手の血液検査データの推移と、1軍寮・2軍寮の違い、試合結果との相関を確認できます。
+          選手の血液検査データの推移と、1寮生・2寮生の違い、試合結果との相関を確認できます。
         </p>
         <SourceBadge blood={bloodData.source} games={gameData.source} />
       </header>
@@ -122,9 +122,9 @@ export function Dashboard({
             value={dorm}
             onChange={(e) => setDorm(e.target.value as Dorm | "all")}
           >
-            <option value="all">1軍寮・2軍寮 両方</option>
-            <option value="1軍寮">1軍寮のみ</option>
-            <option value="2軍寮">2軍寮のみ</option>
+            <option value="all">1寮生・2寮生 両方</option>
+            <option value="1寮生">1寮生のみ</option>
+            <option value="2寮生">2寮生のみ</option>
           </select>
         </Field>
 
@@ -194,7 +194,7 @@ export function Dashboard({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
-            {parameter} の推移{dorm === "all" ? "（1軍寮 vs 2軍寮）" : `（${dorm}）`}
+            {parameter} の推移{dorm === "all" ? "（1寮生 vs 2寮生）" : `（${dorm}）`}
           </h2>
           <button
             type="button"
@@ -211,21 +211,21 @@ export function Dashboard({
             <DataTable
               columns={[
                 { key: "period", label: "月" },
-                { key: "1軍寮", label: "1軍寮 平均", align: "right" },
-                { key: "2軍寮", label: "2軍寮 平均", align: "right" },
+                { key: "1寮生", label: "1寮生 平均", align: "right" },
+                { key: "2寮生", label: "2寮生 平均", align: "right" },
               ]}
               rows={dormComparison.map((d) => ({
                 period: d.period,
-                "1軍寮": d["1軍寮"] ?? "-",
-                "2軍寮": d["2軍寮"] ?? "-",
+                "1寮生": d["1寮生"] ?? "-",
+                "2寮生": d["2寮生"] ?? "-",
               }))}
             />
           ) : (
             <TrendLineChart
               data={dormComparison}
               series={[
-                { key: "1軍寮", label: "1軍寮", color: "var(--series-1)" },
-                { key: "2軍寮", label: "2軍寮", color: "var(--series-2)" },
+                { key: "1寮生", label: "1寮生", color: "var(--series-1)" },
+                { key: "2寮生", label: "2寮生", color: "var(--series-2)" },
               ]}
             />
           )

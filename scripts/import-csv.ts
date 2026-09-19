@@ -4,7 +4,7 @@
  * CSV columns:
  *   選手名   (required) - player name, matches the database's title property
  *   検査日   (required) - test date, "YYYY-MM-DD"
- *   寮       (optional but recommended) - "1軍寮" or "2軍寮": which dorm the
+ *   寮       (optional but recommended) - "1寮生" or "2寮生": which dorm the
  *            player was living in AT THE TIME OF THIS TEST (dorm assignments
  *            change over time, so this is recorded per row, not per player)
  *   ...any other column is treated as a numeric blood-test parameter
@@ -22,7 +22,7 @@ import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoint
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const BLOOD_DB_ID = process.env.NOTION_BLOOD_DATABASE_ID;
-const DORM_VALUES = new Set(["1軍寮", "2軍寮"]);
+const DORM_VALUES = new Set(["1寮生", "2寮生"]);
 const REQUIRED_COLUMNS = ["選手名", "検査日"];
 const METADATA_COLUMNS = new Set(["選手名", "検査日", "寮"]);
 

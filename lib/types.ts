@@ -1,6 +1,6 @@
-export type Dorm = "1軍寮" | "2軍寮";
+export type Dorm = "1寮生" | "2寮生";
 
-export const DORM_OPTIONS: Dorm[] = ["1軍寮", "2軍寮"];
+export const DORM_OPTIONS: Dorm[] = ["1寮生", "2寮生"];
 
 /** One blood-test record for one player on one date. */
 export interface BloodTestRecord {

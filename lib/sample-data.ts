@@ -43,10 +43,10 @@ interface PlayerProfile {
 
 function buildPlayers(gaussian: ReturnType<typeof makeGaussian>): PlayerProfile[] {
   return SURNAMES.map((name, i) => {
-    const dorm: Dorm = i % 2 === 0 ? "1軍寮" : "2軍寮";
-    // 1軍寮 players get a slightly richer/managed diet: modestly higher
+    const dorm: Dorm = i % 2 === 0 ? "1寮生" : "2寮生";
+    // 1寮生 players get a slightly richer/managed diet: modestly higher
     // Hb/Fe/フェリチン and lower CK (less residual fatigue) on average.
-    const dormBoost = dorm === "1軍寮" ? 1 : 0;
+    const dormBoost = dorm === "1寮生" ? 1 : 0;
     return {
       name: `${name}選手`,
       dorm,

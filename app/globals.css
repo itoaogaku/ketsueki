@@ -13,8 +13,8 @@
   --axis: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
 
-  --series-1: #2a78d6; /* blue: 1軍寮 */
-  --series-2: #eb6834; /* orange: 2軍寮 */
+  --series-1: #2a78d6; /* blue: 1寮生 */
+  --series-2: #eb6834; /* orange: 2寮生 */
   --series-3: #1baf7a; /* aqua: metric 2 */
 
   --status-good: #0ca30c;

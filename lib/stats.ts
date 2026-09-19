@@ -45,10 +45,10 @@ export function computeDormComparison(
   records: BloodTestRecord[],
   parameter: string,
   players?: string[]
-): { period: string; "1軍寮"?: number; "2軍寮"?: number; [key: string]: unknown }[] {
+): { period: string; "1寮生"?: number; "2寮生"?: number; [key: string]: unknown }[] {
   const periods = new Set<string>();
-  const dorm1 = computeTrend(records, { parameter, dorm: "1軍寮", players });
-  const dorm2 = computeTrend(records, { parameter, dorm: "2軍寮", players });
+  const dorm1 = computeTrend(records, { parameter, dorm: "1寮生", players });
+  const dorm2 = computeTrend(records, { parameter, dorm: "2寮生", players });
   dorm1.forEach((p) => periods.add(p.period));
   dorm2.forEach((p) => periods.add(p.period));
 
@@ -59,8 +59,8 @@ export function computeDormComparison(
     .sort()
     .map((period) => ({
       period,
-      "1軍寮": map1.get(period),
-      "2軍寮": map2.get(period),
+      "1寮生": map1.get(period),
+      "2寮生": map2.get(period),
     }));
 }
 
