@@ -99,39 +99,83 @@ export interface CorrelationOptions {
   windowDays?: number;
 }
 
-/**
- * Pairs each game with the average of `parameter` across blood tests taken
- * in the `windowDays` before that game (optionally filtered by dorm), then
- * correlates that team-condition proxy against the game's `metric`.
- */
-export function computeCorrelation(
+/** Blood records relevant to one game's pre-game window, still carrying
+ * their full `values` map so every parameter can be read back out without
+ * re-scanning or re-parsing dates per parameter. */
+interface GameWindow {
+  game: GameResultRecord;
+  relevant: BloodTestRecord[];
+}
+
+/** Groups blood records into each game's `windowDays`-before window once, so
+ * `parameter` can vary afterward without re-filtering `bloodRecords` (and
+ * re-parsing every date) for every parameter x metric combination - the
+ * window only depends on (dorm, windowDays, game date), never on which
+ * parameter is being correlated. */
+function computeGameWindows(
   bloodRecords: BloodTestRecord[],
   gameRecords: GameResultRecord[],
-  { parameter, metric, dorm, windowDays = 7 }: CorrelationOptions
-): CorrelationResult {
-  const points: CorrelationResult["points"] = [];
+  { dorm, windowDays = 7 }: { dorm?: Dorm | "all"; windowDays?: number }
+): GameWindow[] {
+  const dormFiltered =
+    dorm && dorm !== "all" ? bloodRecords.filter((r) => r.dorm === dorm) : bloodRecords;
+  const dated = dormFiltered
+    .map((r) => ({ r, t: new Date(`${r.date}T00:00:00Z`).getTime() }))
+    .sort((a, b) => a.t - b.t);
+  const times = dated.map((d) => d.t);
 
-  for (const game of gameRecords) {
-    const metricValue = game.metrics[metric];
-    if (typeof metricValue !== "number") continue;
+  return gameRecords.map((game) => {
     const gameTime = new Date(`${game.date}T00:00:00Z`).getTime();
     const windowStart = gameTime - windowDays * 86400000;
+    // times is sorted ascending, so the matching range is a contiguous slice.
+    let lo = lowerBound(times, windowStart);
+    const hi = upperBound(times, gameTime);
+    const relevant: BloodTestRecord[] = [];
+    for (; lo < hi; lo++) relevant.push(dated[lo].r);
+    return { game, relevant };
+  });
+}
 
-    const relevant = bloodRecords.filter((r) => {
-      if (dorm && dorm !== "all" && r.dorm !== dorm) return false;
-      const value = r.values[parameter];
-      if (typeof value !== "number") return false;
-      const t = new Date(`${r.date}T00:00:00Z`).getTime();
-      return t >= windowStart && t <= gameTime;
-    });
-    if (relevant.length === 0) continue;
+function lowerBound(sorted: number[], value: number): number {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (sorted[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
 
-    const avg =
-      relevant.reduce((s, r) => s + r.values[parameter], 0) / relevant.length;
+function upperBound(sorted: number[], value: number): number {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (sorted[mid] <= value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function correlateFromWindows(
+  windows: GameWindow[],
+  parameter: string,
+  metric: string
+): CorrelationResult {
+  const points: CorrelationResult["points"] = [];
+  for (const { game, relevant } of windows) {
+    const metricValue = game.metrics[metric];
+    if (typeof metricValue !== "number") continue;
+    const values = relevant
+      .map((r) => r.values[parameter])
+      .filter((v): v is number => typeof v === "number");
+    if (values.length === 0) continue;
+    const avg = values.reduce((s, v) => s + v, 0) / values.length;
     points.push({
       x: round(avg, 2),
       y: metricValue,
-      player: `チーム平均(n=${relevant.length})`,
+      player: `チーム平均(n=${values.length})`,
       date: game.date,
     });
   }
@@ -144,8 +188,25 @@ export function computeCorrelation(
   return { parameter, metric, r: r === null ? null : round(r, 3), n: points.length, points };
 }
 
+/**
+ * Pairs each game with the average of `parameter` across blood tests taken
+ * in the `windowDays` before that game (optionally filtered by dorm), then
+ * correlates that team-condition proxy against the game's `metric`.
+ */
+export function computeCorrelation(
+  bloodRecords: BloodTestRecord[],
+  gameRecords: GameResultRecord[],
+  { parameter, metric, dorm, windowDays = 7 }: CorrelationOptions
+): CorrelationResult {
+  const windows = computeGameWindows(bloodRecords, gameRecords, { dorm, windowDays });
+  return correlateFromWindows(windows, parameter, metric);
+}
+
 /** Scans every parameter x metric combination and ranks by |r|, to surface
- * the strongest candidate relationships automatically. */
+ * the strongest candidate relationships automatically. Builds each game's
+ * pre-game blood-record window once (independent of parameter/metric) and
+ * reuses it across the whole scan, rather than re-filtering all blood
+ * records for every parameter x metric pair. */
 export function computeAllCorrelations(
   bloodRecords: BloodTestRecord[],
   gameRecords: GameResultRecord[],
@@ -153,15 +214,11 @@ export function computeAllCorrelations(
   metrics: string[],
   options?: { dorm?: Dorm | "all"; windowDays?: number }
 ): CorrelationResult[] {
+  const windows = computeGameWindows(bloodRecords, gameRecords, options ?? {});
   const results: CorrelationResult[] = [];
   for (const parameter of parameters) {
     for (const metric of metrics) {
-      const result = computeCorrelation(bloodRecords, gameRecords, {
-        parameter,
-        metric,
-        dorm: options?.dorm,
-        windowDays: options?.windowDays,
-      });
+      const result = correlateFromWindows(windows, parameter, metric);
       if (result.r !== null) results.push(result);
     }
   }
