@@ -90,6 +90,12 @@ npm run import:csv -- data/blood-data.csv
 
 同じCSVを再実行しても、「選手名＋検査日」が一致する行は重複登録されないようにスキップされます。
 
+#### ブラウザからインポートする（コマンド操作なしで使いたい場合）
+
+Vercelにデプロイ済みであれば、コマンドを打たなくても `/import` ページからCSVをアップロードするだけでインポートできます。デプロイ先のURLに `/import` を付けて開いてください（例: `https://your-app.vercel.app/import`）。
+
+このページは誰でもアクセスできてしまうため、`IMPORT_SECRET` を環境変数に設定しておくことを強く推奨します（Vercelの Environment Variables で設定）。設定すると、ページ上のパスコード欄に同じ値を入力しないとインポートできなくなります。
+
 ### 6. ローカルで確認
 
 ```bash
@@ -121,7 +127,7 @@ http://localhost:3000 を開くと、ダッシュボードが表示されます�
 
 1. このリポジトリをGitHubにpushします。
 2. https://vercel.com で「Add New... → Project」からこのリポジトリをインポートします。
-3. Vercelの Project Settings → Environment Variables に、`.env.local` と同じ内容（`NOTION_TOKEN` / `NOTION_BLOOD_DATABASE_ID` / `NOTION_GAMES_DATABASE_ID`）を設定します（`NOTION_PARENT_PAGE_ID` はセットアップ用スクリプト専用なので本番には不要です）。
+3. Vercelの Project Settings → Environment Variables に、`NOTION_TOKEN` / `NOTION_BLOOD_DATABASE_ID` / `NOTION_GAMES_DATABASE_ID` / `IMPORT_SECRET` を設定します（`NOTION_PARENT_PAGE_ID` はセットアップ用スクリプト専用なので本番には不要です）。`IMPORT_SECRET` は `/import` ページを保護するための任意のパスコードです（未設定だとURLを知る誰でもインポートできてしまうため、必ず設定してください）。
 4. Deployを実行します。以降はこのブランチにpushするたびに自動でデプロイされます。
 
 ## 技術構成
