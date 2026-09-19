@@ -3,10 +3,29 @@
 import { useMemo, useState } from "react";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
 import { buildDateNormalization } from "@/lib/stats";
-import type { BloodDataResponse, BloodTestRecord } from "@/lib/types";
+import type { BloodDataResponse, BloodTestRecord, Grade } from "@/lib/types";
 import { WideTestTable } from "./WideTestTable";
 
 type SortDir = "desc" | "asc";
+
+// 4年→3年→2年→1年、学年が分からない選手（高校生など）は最後。
+const GRADE_SORT_ORDER: Grade[] = ["4年", "3年", "2年", "1年"];
+
+function gradeRank(grade: Grade | null | undefined): number {
+  if (!grade) return GRADE_SORT_ORDER.length;
+  const i = GRADE_SORT_ORDER.indexOf(grade);
+  return i === -1 ? GRADE_SORT_ORDER.length : i;
+}
+
+function byGradeThenName(
+  a: { player: string; records: BloodTestRecord[] },
+  b: { player: string; records: BloodTestRecord[] }
+) {
+  const ag = gradeRank(a.records.find((r) => r.grade)?.grade);
+  const bg = gradeRank(b.records.find((r) => r.grade)?.grade);
+  if (ag !== bg) return ag - bg;
+  return a.player.localeCompare(b.player, "ja");
+}
 
 /**
  * Pick one test date and see every player tested that round side by side,
@@ -78,7 +97,7 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
   }, [dayRecords]);
 
   const sortedPlayers = useMemo(() => {
-    const sorted = [...players].sort((a, b) => a.player.localeCompare(b.player, "ja"));
+    const sorted = [...players].sort(byGradeThenName);
     if (!sortParam) return sorted;
     // A player normally has one record in the selected window; if they have
     // more (a 基準日 pulling in a nearby make-up day too), sort by whichever
@@ -119,7 +138,7 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
             value={sortParam}
             onChange={(e) => setSortParam(e.target.value)}
           >
-            <option value="">選手名順</option>
+            <option value="">学年順（4年→1年）</option>
             {sortableParams.map((p) => (
               <option key={p} value={p}>
                 {p}
