@@ -33,6 +33,20 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
     [dateNormalization]
   );
 
+  // An anchor's own playerCount only counts players tested on that exact
+  // date - the dropdown label should instead show the full round's headcount
+  // (including whoever tested on a day folded into it).
+  const mergedPlayerCounts = useMemo(() => {
+    const counts = new Map<string, Set<string>>();
+    for (const r of bloodData.records) {
+      const anchor = dateNormalization.toAnchor.get(r.date);
+      if (!anchor) continue;
+      if (!counts.has(anchor)) counts.set(anchor, new Set());
+      counts.get(anchor)!.add(r.player);
+    }
+    return new Map(Array.from(counts, ([date, players]) => [date, players.size]));
+  }, [bloodData.records, dateNormalization]);
+
   const [date, setDate] = useState(selectableDates[0]?.date ?? "");
   const [sortParam, setSortParam] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -92,7 +106,9 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
           <select className="select" value={date} onChange={(e) => setDate(e.target.value)}>
             {selectableDates.map((e) => (
               <option key={e.date} value={e.date}>
-                {e.status === "anchor" ? `${e.date}（基準日・${e.playerCount}人）` : e.date}
+                {e.status === "anchor"
+                  ? `${e.date}（基準日・${mergedPlayerCounts.get(e.date) ?? e.playerCount}人）`
+                  : e.date}
               </option>
             ))}
           </select>
