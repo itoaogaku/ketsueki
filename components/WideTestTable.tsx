@@ -91,8 +91,7 @@ function RowGroup({
     <>
       <tr>
         <td
-          colSpan={1 + groups.reduce((s, g) => s + g.records.length, 0)}
-          className="px-2 py-1 font-medium"
+          className="sticky left-0 z-10 whitespace-nowrap px-2 py-1 font-medium"
           style={{
             background: "var(--background)",
             color: "var(--text-secondary)",
@@ -102,6 +101,14 @@ function RowGroup({
         >
           {group.category}
         </td>
+        <td
+          colSpan={groups.reduce((s, g) => s + g.records.length, 0)}
+          style={{
+            background: "var(--background)",
+            borderTop: "1px solid var(--border)",
+            borderBottom: "1px solid var(--border)",
+          }}
+        />
       </tr>
       {group.params.map((param) => (
         <tr key={param}>
