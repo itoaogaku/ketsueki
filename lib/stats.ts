@@ -72,6 +72,56 @@ export function computeDormComparison(
     }));
 }
 
+export interface ComparisonGroup {
+  key: string;
+  label: string;
+  match: (r: BloodTestRecord) => boolean;
+}
+
+/** Per-exact-test-date (not monthly) average of `parameter` for each group
+ * (e.g. dorm or grade), for a chart/table that lines up group averages on
+ * the actual days blood was drawn rather than a monthly bucket. */
+export function computeGroupComparisonByDate(
+  records: BloodTestRecord[],
+  parameter: string,
+  groups: ComparisonGroup[]
+): Record<string, unknown>[] {
+  const periods = new Set<string>();
+  const perGroup = new Map<string, Map<string, number[]>>(groups.map((g) => [g.key, new Map()]));
+
+  for (const r of records) {
+    const value = r.values[parameter];
+    if (typeof value !== "number") continue;
+    for (const g of groups) {
+      if (!g.match(r)) continue;
+      const byDate = perGroup.get(g.key)!;
+      if (!byDate.has(r.date)) byDate.set(r.date, []);
+      byDate.get(r.date)!.push(value);
+    }
+    periods.add(r.date);
+  }
+
+  return Array.from(periods)
+    .sort()
+    .map((period) => {
+      const row: Record<string, unknown> = { period };
+      for (const g of groups) {
+        const values = perGroup.get(g.key)!.get(period);
+        row[g.key] = values && values.length > 0 ? round(values.reduce((s, v) => s + v, 0) / values.length, 2) : undefined;
+      }
+      return row;
+    });
+}
+
+export const DORM_COMPARISON_GROUPS: ComparisonGroup[] = [
+  { key: "1寮生", label: "1寮生", match: (r) => r.dorm === "1寮生" },
+  { key: "2寮生", label: "2寮生", match: (r) => r.dorm === "2寮生" },
+];
+
+export const GRADE_COMPARISON_GROUPS: ComparisonGroup[] = ["1年", "2年", "3年", "4年"].map(
+  (g) => ({ key: g, label: g, match: (r) => r.grade === g })
+);
+
 export function pearsonCorrelation(xs: number[], ys: number[]): number | null {
   const n = xs.length;
   if (n < 3) return null; // too few points to mean anything

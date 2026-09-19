@@ -109,6 +109,23 @@ function extractBloodRecord(page: PageObjectResponse): BloodTestRecord {
   return { id: page.id, player, date, dorm, grade, values };
 }
 
+/** Matches a race time written as text, e.g. "13:47.76" or "9:16.68" -
+ * minutes:seconds(.hundredths). Times are recorded this way (not as a
+ * Number property) in the 競技結果DB, so they land in `labels` like any
+ * other text unless parsed into seconds here for numeric use (charts,
+ * correlation). Non-time text in the same column (e.g. "途中棄権" for a
+ * DNF) simply doesn't match and is left as a label only. */
+const RACE_TIME_PATTERN = /^(\d{1,3}):([0-5]\d)(?:\.(\d+))?$/;
+
+function parseRaceTimeSeconds(text: string): number | null {
+  const m = RACE_TIME_PATTERN.exec(text.trim());
+  if (!m) return null;
+  const minutes = Number(m[1]);
+  const seconds = Number(m[2]);
+  const fraction = m[3] ? Number(`0.${m[3]}`) : 0;
+  return Math.round((minutes * 60 + seconds + fraction) * 100) / 100;
+}
+
 function extractGameRecord(page: PageObjectResponse): GameResultRecord {
   let date = "";
   let opponent: string | null = null;
@@ -130,6 +147,8 @@ function extractGameRecord(page: PageObjectResponse): GameResultRecord {
       if (text) {
         labels[name] = text;
         if (/相手|対戦/.test(name)) opponent = text;
+        const seconds = parseRaceTimeSeconds(text);
+        if (seconds !== null) metrics[`${name}（秒）`] = seconds;
       }
     } else if (prop.type === "title") {
       const text = prop.title.map((t) => t.plain_text).join("");

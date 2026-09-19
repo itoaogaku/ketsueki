@@ -7,11 +7,14 @@ import { TrendLineChart } from "./TrendLineChart";
 import { CorrelationScatter } from "./CorrelationScatter";
 import { DataTable } from "./DataTable";
 import { GradeTable } from "./GradeTable";
+import { GroupComparisonSection } from "./GroupComparisonSection";
 import {
   computeAllCorrelations,
   computeCorrelation,
   computeDormComparison,
   computeTrend,
+  DORM_COMPARISON_GROUPS,
+  GRADE_COMPARISON_GROUPS,
 } from "@/lib/stats";
 import type { BloodDataResponse, Dorm, GameResultsResponse } from "@/lib/types";
 
@@ -39,8 +42,40 @@ export function Dashboard({
   const [showTable, setShowTable] = useState(false);
 
   const [corrParameter, setCorrParameter] = useState(bloodData.parameters[0] ?? "");
-  const [corrMetric, setCorrMetric] = useState(gameData.metrics[0] ?? "");
+  const [corrMetric, setCorrMetric] = useState(
+    gameData.metrics.find((m) => /秒|タイム|記録/.test(m)) ?? gameData.metrics[0] ?? ""
+  );
   const [windowDays, setWindowDays] = useState(7);
+
+  // Narrow the games considered for correlation to a specific label value -
+  // e.g. 種目（分類）=5000m - since a generic "相関" over every event/distance
+  // mixed together isn't meaningful (a 5000m time and a 3000m time aren't on
+  // the same scale). Defaults to the first 種目-like label whose value list
+  // includes "5000m", since that's the recurring ask; the dropdowns let it
+  // be pointed at any other label/value instead.
+  const eventLabelKeys = gameData.labels.filter((k) => /種目/.test(k));
+  const defaultEventKey =
+    eventLabelKeys.find((k) => gameData.records.some((r) => r.labels[k] === "5000m")) ?? "";
+  const [eventFilterKey, setEventFilterKey] = useState(defaultEventKey);
+  const [eventFilterValue, setEventFilterValue] = useState(
+    defaultEventKey ? "5000m" : ""
+  );
+  const eventFilterValues = useMemo(() => {
+    if (!eventFilterKey) return [];
+    const values = new Set<string>();
+    gameData.records.forEach((r) => {
+      const v = r.labels[eventFilterKey];
+      if (v) values.add(v);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b, "ja"));
+  }, [gameData.records, eventFilterKey]);
+  const filteredGameRecords = useMemo(
+    () =>
+      eventFilterKey && eventFilterValue
+        ? gameData.records.filter((r) => r.labels[eventFilterKey] === eventFilterValue)
+        : gameData.records,
+    [gameData.records, eventFilterKey, eventFilterValue]
+  );
 
   const togglePlayer = (name: string) => {
     setSelectedPlayers((prev) =>
@@ -76,25 +111,25 @@ export function Dashboard({
 
   const correlation = useMemo(
     () =>
-      computeCorrelation(bloodData.records, gameData.records, {
+      computeCorrelation(bloodData.records, filteredGameRecords, {
         parameter: corrParameter,
         metric: corrMetric,
         dorm,
         windowDays,
       }),
-    [bloodData.records, gameData.records, corrParameter, corrMetric, dorm, windowDays]
+    [bloodData.records, filteredGameRecords, corrParameter, corrMetric, dorm, windowDays]
   );
 
   const ranked = useMemo(
     () =>
       computeAllCorrelations(
         bloodData.records,
-        gameData.records,
+        filteredGameRecords,
         bloodData.parameters,
         gameData.metrics,
         { dorm, windowDays }
       ).slice(0, 10),
-    [bloodData.records, gameData.records, bloodData.parameters, gameData.metrics, dorm, windowDays]
+    [bloodData.records, filteredGameRecords, bloodData.parameters, gameData.metrics, dorm, windowDays]
   );
 
   const players = bloodData.players.filter((p) =>
@@ -267,6 +302,22 @@ export function Dashboard({
         )}
       </section>
 
+      {/* 1寮生 vs 2寮生, by exact test date */}
+      <GroupComparisonSection
+        title="1寮生・2寮生の比較（検査日ごと）"
+        records={bloodData.records}
+        parameters={bloodData.parameters}
+        groups={DORM_COMPARISON_GROUPS}
+      />
+
+      {/* Grade comparison, by exact test date */}
+      <GroupComparisonSection
+        title="学年別の比較（検査日ごと）"
+        records={bloodData.records}
+        parameters={bloodData.parameters}
+        groups={GRADE_COMPARISON_GROUPS}
+      />
+
       {/* Correlation with game results */}
       <section className="space-y-4">
         <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
@@ -274,6 +325,39 @@ export function Dashboard({
         </h2>
 
         <div className="flex flex-wrap items-end gap-4">
+          <Field label="種目で絞り込み">
+            <select
+              className="select"
+              value={eventFilterKey}
+              onChange={(e) => {
+                setEventFilterKey(e.target.value);
+                setEventFilterValue("");
+              }}
+            >
+              <option value="">絞り込まない（全種目）</option>
+              {eventLabelKeys.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {eventFilterKey && (
+            <Field label="値">
+              <select
+                className="select"
+                value={eventFilterValue}
+                onChange={(e) => setEventFilterValue(e.target.value)}
+              >
+                <option value="">すべて</option>
+                {eventFilterValues.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="血液検査項目">
             <select
               className="select"
