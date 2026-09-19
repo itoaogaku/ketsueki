@@ -153,7 +153,7 @@ export function Dashboard({
           <Link
             href="/import"
             className="rounded px-3 py-2 text-sm font-medium"
-            style={{ background: "var(--series-1)", color: "#ffffff" }}
+            style={{ background: "var(--brand)", color: "#ffffff" }}
           >
             CSVインポート
           </Link>
@@ -214,7 +214,7 @@ export function Dashboard({
                   onClick={() => togglePlayer(p)}
                   className="rounded px-2 py-1 text-xs"
                   style={{
-                    background: active ? "var(--series-1)" : "transparent",
+                    background: active ? "var(--brand)" : "transparent",
                     color: active ? "#ffffff" : "var(--text-secondary)",
                     border: "1px solid var(--border)",
                   }}

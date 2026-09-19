@@ -95,7 +95,7 @@ export default function ImportPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
       <header className="space-y-1">
-        <Link href="/" className="text-sm" style={{ color: "var(--series-1)" }}>
+        <Link href="/" className="text-sm" style={{ color: "var(--brand)" }}>
           ← ダッシュボードに戻る
         </Link>
         <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -152,7 +152,7 @@ export default function ImportPage() {
           onClick={submit}
           disabled={!file || loading}
           className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
-          style={{ background: "var(--series-1)", color: "#ffffff" }}
+          style={{ background: "var(--brand)", color: "#ffffff" }}
         >
           {loading
             ? summary

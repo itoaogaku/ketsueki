@@ -13,10 +13,15 @@
   --axis: #c3c2b7;
   --border: rgba(11, 11, 11, 0.1);
 
-  --series-1: #2a78d6; /* blue: 1寮生 */
+  --series-1: #2a78d6; /* blue: 1寮生, and the low-value legend color - tied
+    to the red/blue high/low convention shown throughout the app, so this
+    stays fixed regardless of brand color. */
   --series-2: #eb6834; /* orange: 2寮生 */
   --series-3: #1baf7a; /* aqua: metric 2 */
   --series-4: #8a5fd6; /* purple: metric 3 */
+
+  --brand: #2f5d4f; /* dark green: buttons, links, active-state chrome */
+  --brand-soft: rgba(47, 93, 79, 0.1);
 
   --status-good: #0ca30c;
   --status-warning: #fab219;
@@ -49,4 +54,8 @@ body {
   padding: 6px 8px;
   font-size: 13px;
   min-width: 160px;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--brand);
 }

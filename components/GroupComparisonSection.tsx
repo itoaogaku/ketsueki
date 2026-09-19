@@ -117,7 +117,7 @@ export function GroupComparisonSection({
               key={p}
               className="flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs"
               style={{
-                background: active ? "var(--series-1)" : "transparent",
+                background: active ? "var(--brand)" : "transparent",
                 color: active ? "#ffffff" : "var(--text-secondary)",
                 border: "1px solid var(--border)",
               }}

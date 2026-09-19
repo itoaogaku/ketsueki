@@ -2,26 +2,60 @@
 
 import { useMemo, useState } from "react";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
-import type { BloodDataResponse } from "@/lib/types";
+import { buildDateNormalization } from "@/lib/stats";
+import type { BloodDataResponse, BloodTestRecord } from "@/lib/types";
 import { WideTestTable } from "./WideTestTable";
 
 type SortDir = "desc" | "asc";
 
-/** Pick one exact test date and see every player tested that day side by
- * side, sortable by any parameter (e.g. 総蛋白 highest-to-lowest). */
+/**
+ * Pick one test date and see every player tested that round side by side,
+ * sortable by any parameter (e.g. 総蛋白 highest-to-lowest).
+ *
+ * A "基準日" (main testing day, 40+ players) also pulls in players who
+ * tested on a nearby make-up day instead - each still shown under their own
+ * true test date - so a handful of stragglers don't need a separate, easy
+ * to miss entry of their own. Days that were folded into a 基準日 this way
+ * aren't listed separately; a day that stands entirely on its own (not a
+ * 基準日 and not close enough to one) is kept as its own selectable entry.
+ */
 export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse }) {
-  const availableDates = useMemo(
-    () => Array.from(new Set(bloodData.records.map((r) => r.date))).sort().reverse(),
+  const dateNormalization = useMemo(
+    () => buildDateNormalization(bloodData.records),
     [bloodData.records]
   );
-  const [date, setDate] = useState(availableDates[0] ?? "");
+
+  const selectableDates = useMemo(
+    () =>
+      dateNormalization.entries
+        .filter((e) => e.status !== "merged")
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [dateNormalization]
+  );
+
+  const [date, setDate] = useState(selectableDates[0]?.date ?? "");
   const [sortParam, setSortParam] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const dayRecords = useMemo(
-    () => bloodData.records.filter((r) => r.date === date).sort((a, b) => a.player.localeCompare(b.player, "ja")),
-    [bloodData.records, date]
-  );
+  const selected = selectableDates.find((e) => e.date === date);
+
+  const dayRecords = useMemo(() => {
+    if (!date) return [];
+    if (selected?.status === "anchor") {
+      return bloodData.records.filter((r) => dateNormalization.toAnchor.get(r.date) === date);
+    }
+    return bloodData.records.filter((r) => r.date === date);
+  }, [bloodData.records, date, selected, dateNormalization]);
+
+  const players = useMemo(() => {
+    const byPlayer = new Map<string, BloodTestRecord[]>();
+    for (const r of dayRecords) {
+      if (!byPlayer.has(r.player)) byPlayer.set(r.player, []);
+      byPlayer.get(r.player)!.push(r);
+    }
+    for (const records of byPlayer.values()) records.sort((a, b) => a.date.localeCompare(b.date));
+    return Array.from(byPlayer.entries()).map(([player, records]) => ({ player, records }));
+  }, [dayRecords]);
 
   const sortableParams = useMemo(() => {
     const params = new Set<string>();
@@ -29,17 +63,23 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
     return orderParametersByCategory(Array.from(params)).flatMap((g) => g.params);
   }, [dayRecords]);
 
-  const sortedRecords = useMemo(() => {
-    if (!sortParam) return dayRecords;
-    const withValue = dayRecords.filter((r) => typeof r.values[sortParam] === "number");
-    const withoutValue = dayRecords.filter((r) => typeof r.values[sortParam] !== "number");
-    withValue.sort((a, b) =>
-      sortDir === "asc"
-        ? a.values[sortParam] - b.values[sortParam]
-        : b.values[sortParam] - a.values[sortParam]
-    );
+  const sortedPlayers = useMemo(() => {
+    const sorted = [...players].sort((a, b) => a.player.localeCompare(b.player, "ja"));
+    if (!sortParam) return sorted;
+    // A player normally has one record in the selected window; if they have
+    // more (a 基準日 pulling in a nearby make-up day too), sort by whichever
+    // of their records actually has this parameter's value.
+    const valueFor = (recs: BloodTestRecord[]) =>
+      recs.map((r) => r.values[sortParam]).find((v) => typeof v === "number");
+    const withValue = sorted.filter((p) => typeof valueFor(p.records) === "number");
+    const withoutValue = sorted.filter((p) => typeof valueFor(p.records) !== "number");
+    withValue.sort((a, b) => {
+      const av = valueFor(a.records)!;
+      const bv = valueFor(b.records)!;
+      return sortDir === "asc" ? av - bv : bv - av;
+    });
     return [...withValue, ...withoutValue];
-  }, [dayRecords, sortParam, sortDir]);
+  }, [players, sortParam, sortDir]);
 
   return (
     <section className="space-y-3">
@@ -50,9 +90,9 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
       <div className="flex flex-wrap items-end gap-4">
         <Field label="検査日">
           <select className="select" value={date} onChange={(e) => setDate(e.target.value)}>
-            {availableDates.map((d) => (
-              <option key={d} value={d}>
-                {d}
+            {selectableDates.map((e) => (
+              <option key={e.date} value={e.date}>
+                {e.status === "anchor" ? `${e.date}（基準日・${e.playerCount}人）` : e.date}
               </option>
             ))}
           </select>
@@ -84,16 +124,18 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
           </Field>
         )}
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {dayRecords.length}名の検査
+          {players.length}名の検査
         </p>
       </div>
 
-      {dayRecords.length === 0 ? (
+      {players.length === 0 ? (
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
           この日の検査データがありません。
         </p>
       ) : (
-        <WideTestTable groups={sortedRecords.map((r) => ({ label: r.player, records: [r] }))} />
+        <WideTestTable
+          groups={sortedPlayers.map((p) => ({ label: p.player, records: p.records }))}
+        />
       )}
     </section>
   );
