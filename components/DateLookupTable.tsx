@@ -108,7 +108,7 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
               <option key={e.date} value={e.date}>
                 {e.status === "anchor"
                   ? `${e.date}（基準日・${mergedPlayerCounts.get(e.date) ?? e.playerCount}人）`
-                  : e.date}
+                  : `${e.date}（${e.playerCount}人）`}
               </option>
             ))}
           </select>
