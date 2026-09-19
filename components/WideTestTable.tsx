@@ -31,7 +31,11 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
         background: "var(--surface-1)",
       }}
     >
-      <table className="text-xs" style={{ borderCollapse: "collapse" }}>
+      {/* border-collapse: collapse breaks sticky positioning on <thead> in
+          most browsers (a thin gap opens up where scrolled-past body rows
+          bleed through above the "stuck" header) - border-spacing: 0 keeps
+          the same tight grid look without that interaction. */}
+      <table className="text-xs" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
         <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
           <tr>
             <th
