@@ -37,8 +37,13 @@ export interface ImportSummary {
   dryRun: boolean;
   mode: "create" | "upsert";
   /** true if `maxCreate` cut this call short - call again with the same CSV
-   * to continue (already-written rows are recognized and skipped/updated). */
+   * (passing this response's `nextOffset` back as `offset`) to continue. */
   hasMore: boolean;
+  /** Row index (into the CSV's valid rows) to resume from on the next call.
+   * Required for `mode: "upsert"`, where every already-existing row is
+   * written again on every call - without an offset, a batched call would
+   * reprocess the same leading rows forever instead of advancing. */
+  nextOffset: number;
 }
 
 function sleep(ms: number) {
@@ -127,7 +132,8 @@ export async function importBloodCsv(
     dryRun = false,
     mode = "create",
     maxCreate,
-  }: { dryRun?: boolean; mode?: "create" | "upsert"; maxCreate?: number } = {}
+    offset = 0,
+  }: { dryRun?: boolean; mode?: "create" | "upsert"; maxCreate?: number; offset?: number } = {}
 ): Promise<ImportSummary> {
   const bloodDbId = process.env.NOTION_BLOOD_DATABASE_ID;
   if (!bloodDbId) throw new Error("NOTION_BLOOD_DATABASE_ID が設定されていません");
@@ -235,13 +241,16 @@ export async function importBloodCsv(
   let skippedDuplicate = 0;
   let missingDorm = 0;
   let hasMore = false;
+  let nextOffset = validRows.length;
 
-  for (const { player, date, row } of validRows) {
+  for (let i = offset; i < validRows.length; i++) {
     if (!dryRun && maxCreate !== undefined && created + updated >= maxCreate) {
       hasMore = true;
+      nextOffset = i;
       break;
     }
 
+    const { player, date, row } = validRows[i];
     const key = `${player}__${date}`;
     const existingPageId = existingKeys.get(key);
 
@@ -298,5 +307,6 @@ export async function importBloodCsv(
     dryRun,
     mode,
     hasMore,
+    nextOffset,
   };
 }

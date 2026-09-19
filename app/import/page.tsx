@@ -40,6 +40,7 @@ export default function ImportPage() {
       let totalCreated = 0;
       let totalUpdated = 0;
       let totalMissingDorm = 0;
+      let offset = 0;
       const allWarnings: string[] = [];
       const addedPropertiesSoFar: string[] = [];
 
@@ -49,7 +50,10 @@ export default function ImportPage() {
         formData.append("dryRun", String(dryRun));
         formData.append("mode", upsert ? "upsert" : "create");
         if (secret) formData.append("secret", secret);
-        if (!dryRun) formData.append("maxCreate", String(BATCH_SIZE));
+        if (!dryRun) {
+          formData.append("maxCreate", String(BATCH_SIZE));
+          formData.append("offset", String(offset));
+        }
 
         const res = await fetch("/api/import-blood-data", { method: "POST", body: formData });
         const data = await res.json();
@@ -79,6 +83,7 @@ export default function ImportPage() {
         });
 
         if (!roundSummary.hasMore) break;
+        offset = roundSummary.nextOffset;
       }
     } catch {
       setError("通信エラーが発生しました");
