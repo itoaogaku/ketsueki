@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useState } from "react";
 import type { ImportSummary } from "@/lib/import-blood-csv";
 
+// A large CSV writes one Notion page at a time (to respect the API's rate
+// limit), which can take longer than a single serverless invocation allows.
+// So writes happen in small batches: each request creates at most this many
+// pages and reports back whether more remain, and the browser keeps calling
+// the endpoint (already-written rows are recognized and skipped) until done.
+const BATCH_SIZE = 10;
+
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [secret, setSecret] = useState("");
@@ -18,17 +25,30 @@ export default function ImportPage() {
     setError(null);
     setSummary(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("dryRun", String(dryRun));
-      if (secret) formData.append("secret", secret);
+      let totalCreated = 0;
+      for (;;) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("dryRun", String(dryRun));
+        if (secret) formData.append("secret", secret);
+        if (!dryRun) formData.append("maxCreate", String(BATCH_SIZE));
 
-      const res = await fetch("/api/import-blood-data", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "インポートに失敗しました");
-      } else {
-        setSummary(data.summary);
+        const res = await fetch("/api/import-blood-data", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? "インポートに失敗しました");
+          return;
+        }
+
+        const roundSummary: ImportSummary = data.summary;
+        totalCreated += roundSummary.created;
+        // Show live progress: each round's other stats (skipped/warnings)
+        // only become complete once the whole file has been scanned, which
+        // happens on the final round - `created` is accumulated across
+        // rounds so it keeps growing as batches complete.
+        setSummary({ ...roundSummary, created: totalCreated });
+
+        if (!roundSummary.hasMore) break;
       }
     } catch {
       setError("通信エラーが発生しました");
@@ -94,7 +114,13 @@ export default function ImportPage() {
           className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
           style={{ background: "var(--series-1)", color: "#ffffff" }}
         >
-          {loading ? "処理中..." : dryRun ? "内容を確認" : "Notionにインポート"}
+          {loading
+            ? summary
+              ? `処理中... (${summary.created}件作成)`
+              : "処理中..."
+            : dryRun
+              ? "内容を確認"
+              : "Notionにインポート"}
         </button>
       </section>
 

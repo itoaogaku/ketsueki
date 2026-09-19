@@ -16,6 +16,9 @@ export interface ImportSummary {
   missingDorm: number;
   warnings: string[];
   dryRun: boolean;
+  /** true if `maxCreate` cut this call short - call again with the same CSV
+   * to continue (already-created rows are skipped via the dedupe check). */
+  hasMore: boolean;
 }
 
 function sleep(ms: number) {
@@ -43,10 +46,18 @@ function dedupeKeyFromPage(page: PageObjectResponse): string | null {
  * CSV columns: 選手名 + 検査日 (required), 寮 (optional), and any other
  * column is treated as a numeric blood-test parameter and auto-created as a
  * Number property in Notion if it doesn't already exist.
+ *
+ * `maxCreate` caps how many new pages this call will actually create before
+ * returning early (`hasMore: true`) - a large CSV writes one page at a time
+ * with a small delay between them to respect Notion's rate limit, which can
+ * otherwise run well past a serverless function's time limit. The caller
+ * (the /import page) re-invokes with the same CSV until `hasMore` is false;
+ * rows already written are recognized via the dedupe check and skipped, so
+ * each call just continues where the last one stopped.
  */
 export async function importBloodCsv(
   csvText: string,
-  { dryRun = false }: { dryRun?: boolean } = {}
+  { dryRun = false, maxCreate }: { dryRun?: boolean; maxCreate?: number } = {}
 ): Promise<ImportSummary> {
   const bloodDbId = process.env.NOTION_BLOOD_DATABASE_ID;
   if (!bloodDbId) throw new Error("NOTION_BLOOD_DATABASE_ID が設定されていません");
@@ -111,8 +122,14 @@ export async function importBloodCsv(
   let skippedDuplicate = 0;
   let skippedInvalid = 0;
   let missingDorm = 0;
+  let hasMore = false;
 
   for (const row of parsed.data) {
+    if (!dryRun && maxCreate !== undefined && created >= maxCreate) {
+      hasMore = true;
+      break;
+    }
+
     const player = row["選手名"]?.trim();
     const date = row["検査日"]?.trim();
     if (!player || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
@@ -155,7 +172,7 @@ export async function importBloodCsv(
         parent: { type: "data_source_id", data_source_id: dataSourceId },
         properties: properties as Parameters<typeof notion.pages.create>[0]["properties"],
       });
-      await sleep(350); // stay comfortably under Notion's rate limit
+      await sleep(150); // stay comfortably under Notion's rate limit
     }
     created++;
     existingKeys.add(key); // guard against duplicate rows within the same CSV
@@ -170,5 +187,6 @@ export async function importBloodCsv(
     missingDorm,
     warnings,
     dryRun,
+    hasMore,
   };
 }
