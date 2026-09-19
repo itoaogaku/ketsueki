@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { TrendLineChart } from "./TrendLineChart";
 import { DataTable } from "./DataTable";
-import { computeGroupComparisonByDate, type ComparisonGroup } from "@/lib/stats";
+import { buildDateNormalization, computeGroupComparisonByDate, type ComparisonGroup } from "@/lib/stats";
 import type { BloodTestRecord } from "@/lib/types";
 
 const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
@@ -28,15 +28,27 @@ export function GroupComparisonSection({
 }) {
   const [checked, setChecked] = useState<string[]>(parameters[0] ? [parameters[0]] : []);
   const [showTable, setShowTable] = useState(false);
+  const [showDateLog, setShowDateLog] = useState(false);
 
   const toggle = (p: string) => {
     setChecked((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
   };
 
+  // A handful of players sometimes test on a make-up day (a different
+  // player missed the main round and went later), which would otherwise
+  // show up as its own thin, misleading data point. Treat any day with 40+
+  // players tested as a "main round" and fold any other day within a week
+  // of one into it; days further out than that are dropped from these
+  // by-date charts entirely (see the log table below for exactly which).
+  const dateNormalization = useMemo(() => buildDateNormalization(records), [records]);
+
   const chartParameter = checked[0] ?? "";
   const chartData = useMemo(
-    () => (chartParameter ? computeGroupComparisonByDate(records, chartParameter, groups) : []),
-    [records, chartParameter, groups]
+    () =>
+      chartParameter
+        ? computeGroupComparisonByDate(records, chartParameter, groups, dateNormalization)
+        : [],
+    [records, chartParameter, groups, dateNormalization]
   );
 
   const table = useMemo(() => {
@@ -44,7 +56,10 @@ export function GroupComparisonSection({
     const perParam = checked.map((p) => ({
       parameter: p,
       byDate: new Map(
-        computeGroupComparisonByDate(records, p, groups).map((row) => [row.period as string, row])
+        computeGroupComparisonByDate(records, p, groups, dateNormalization).map((row) => [
+          row.period as string,
+          row,
+        ])
       ),
     }));
     const dates = new Set<string>();
@@ -73,7 +88,7 @@ export function GroupComparisonSection({
         return row;
       });
     return { columns, rows };
-  }, [checked, records, groups]);
+  }, [checked, records, groups, dateNormalization]);
 
   return (
     <section className="space-y-3">
@@ -142,6 +157,51 @@ export function GroupComparisonSection({
           />
         </>
       )}
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowDateLog((v) => !v)}
+          className="text-xs underline"
+          style={{ color: "var(--text-muted)" }}
+        >
+          {showDateLog ? "検査日の統合ルールを隠す" : "検査日の統合ルールを見る"}
+        </button>
+        {showDateLog && (
+          <div className="mt-2 space-y-1">
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              40名以上が受けた日を「基準日」とし、その前後1週間以内の日はその基準日にまとめて集計しています。それ以外（基準日から1週間より離れた日）は、このグラフ・表の集計から除外しています。
+            </p>
+            <DateNormalizationLog entries={dateNormalization.entries} />
+          </div>
+        )}
+      </div>
     </section>
+  );
+}
+
+function DateNormalizationLog({
+  entries,
+}: {
+  entries: ReturnType<typeof buildDateNormalization>["entries"];
+}) {
+  const STATUS_LABEL = { anchor: "基準日", merged: "統合", excluded: "除外" } as const;
+  return (
+    <DataTable
+      columns={[
+        { key: "date", label: "検査日" },
+        { key: "playerCount", label: "人数", align: "right" },
+        { key: "status", label: "判定" },
+        { key: "mergedInto", label: "統合先" },
+      ]}
+      rows={[...entries]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((e) => ({
+          date: e.date,
+          playerCount: e.playerCount,
+          status: STATUS_LABEL[e.status],
+          mergedInto: e.mergedInto ?? (e.status === "excluded" ? "(除外)" : "-"),
+        }))}
+    />
   );
 }

@@ -78,13 +78,85 @@ export interface ComparisonGroup {
   match: (r: BloodTestRecord) => boolean;
 }
 
+export interface DateNormalizationEntry {
+  date: string;
+  playerCount: number;
+  /** "anchor" = a main testing day on its own; "merged" = folded into a
+   * nearby anchor date (e.g. a handful of players tested late/make-up);
+   * "excluded" = too far from any anchor day to treat as the same round. */
+  status: "anchor" | "merged" | "excluded";
+  mergedInto?: string;
+}
+
+export interface DateNormalization {
+  /** original date -> the anchor date its records should be counted under.
+   * Only contains entries for dates that are kept (anchor or merged); an
+   * excluded date has no entry. */
+  toAnchor: Map<string, string>;
+  entries: DateNormalizationEntry[];
+}
+
+/**
+ * Groups test dates around "main testing days" so a handful of players who
+ * tested late (a make-up day for whoever missed the main round) don't show
+ * up as their own thin, misleading data point. A date with at least
+ * `anchorMinPlayers` distinct players tested is an anchor; any other date
+ * within `windowDays` of the nearest anchor is folded into it; anything
+ * further out is dropped from date-based comparisons entirely.
+ */
+export function buildDateNormalization(
+  records: BloodTestRecord[],
+  { anchorMinPlayers = 40, windowDays = 7 }: { anchorMinPlayers?: number; windowDays?: number } = {}
+): DateNormalization {
+  const playersByDate = new Map<string, Set<string>>();
+  for (const r of records) {
+    if (!playersByDate.has(r.date)) playersByDate.set(r.date, new Set());
+    playersByDate.get(r.date)!.add(r.player);
+  }
+  const allDates = Array.from(playersByDate.keys()).sort();
+  const toMs = (d: string) => new Date(`${d}T00:00:00Z`).getTime();
+  const anchors = allDates.filter((d) => playersByDate.get(d)!.size >= anchorMinPlayers);
+  const anchorTimes = anchors.map(toMs);
+
+  const toAnchor = new Map<string, string>();
+  const entries: DateNormalizationEntry[] = [];
+  for (const d of allDates) {
+    const playerCount = playersByDate.get(d)!.size;
+    if (anchors.includes(d)) {
+      toAnchor.set(d, d);
+      entries.push({ date: d, playerCount, status: "anchor" });
+      continue;
+    }
+    const t = toMs(d);
+    let bestAnchor: string | null = null;
+    let bestDist = Infinity;
+    for (let i = 0; i < anchors.length; i++) {
+      const dist = Math.abs(t - anchorTimes[i]);
+      if (dist <= windowDays * 86400000 && dist < bestDist) {
+        bestAnchor = anchors[i];
+        bestDist = dist;
+      }
+    }
+    if (bestAnchor) {
+      toAnchor.set(d, bestAnchor);
+      entries.push({ date: d, playerCount, status: "merged", mergedInto: bestAnchor });
+    } else {
+      entries.push({ date: d, playerCount, status: "excluded" });
+    }
+  }
+  return { toAnchor, entries };
+}
+
 /** Per-exact-test-date (not monthly) average of `parameter` for each group
  * (e.g. dorm or grade), for a chart/table that lines up group averages on
- * the actual days blood was drawn rather than a monthly bucket. */
+ * the actual days blood was drawn rather than a monthly bucket. When
+ * `dateNormalization` is given, each record's date is folded onto its
+ * anchor date (or dropped if excluded) before bucketing. */
 export function computeGroupComparisonByDate(
   records: BloodTestRecord[],
   parameter: string,
-  groups: ComparisonGroup[]
+  groups: ComparisonGroup[],
+  dateNormalization?: DateNormalization
 ): Record<string, unknown>[] {
   const periods = new Set<string>();
   const perGroup = new Map<string, Map<string, number[]>>(groups.map((g) => [g.key, new Map()]));
@@ -92,13 +164,15 @@ export function computeGroupComparisonByDate(
   for (const r of records) {
     const value = r.values[parameter];
     if (typeof value !== "number") continue;
+    const date = dateNormalization ? dateNormalization.toAnchor.get(r.date) : r.date;
+    if (!date) continue; // excluded by the date normalization
     for (const g of groups) {
       if (!g.match(r)) continue;
       const byDate = perGroup.get(g.key)!;
-      if (!byDate.has(r.date)) byDate.set(r.date, []);
-      byDate.get(r.date)!.push(value);
+      if (!byDate.has(date)) byDate.set(date, []);
+      byDate.get(date)!.push(value);
     }
-    periods.add(r.date);
+    periods.add(date);
   }
 
   return Array.from(periods)
