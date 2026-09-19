@@ -12,6 +12,9 @@
   --gridline: #aeaca0;
   --axis: #c3c2b7;
   --border: #0b0b0b;
+  --surface-empty: #e2e1dc; /* fills the space past a table's last real
+    column, when its container is wider than its content, so that empty
+    space reads as "nothing here" instead of looking like more data */
 
   --series-1: #2a78d6; /* blue: 1寮生, and the low-value legend color - tied
     to the red/blue high/low convention shown throughout the app, so this

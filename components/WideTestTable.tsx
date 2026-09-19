@@ -28,14 +28,26 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
         maxHeight: "calc(91vh - 1.5cm)",
         width: "130%",
         marginLeft: "-15%",
-        background: "var(--surface-1)",
+        // Gray, not white: the container is wider than the table itself (to
+        // give the enlarged view room), and that leftover strip past the
+        // table's own right edge should read as "no more data" rather than
+        // looking like part of the table.
+        background: "var(--surface-empty)",
       }}
     >
       {/* border-collapse: collapse breaks sticky positioning on <thead> in
           most browsers (a thin gap opens up where scrolled-past body rows
           bleed through above the "stuck" header) - border-spacing: 0 keeps
           the same tight grid look without that interaction. */}
-      <table className="text-xs" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+      <table
+        className="text-xs"
+        style={{
+          borderCollapse: "separate",
+          borderSpacing: 0,
+          background: "var(--surface-1)",
+          borderRight: "1px solid var(--border)",
+        }}
+      >
         <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
           <tr>
             <th
