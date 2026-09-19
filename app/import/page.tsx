@@ -25,7 +25,18 @@ export default function ImportPage() {
     setError(null);
     setSummary(null);
     try {
+      // Only rows newly processed in a given round reach the dorm/value
+      // checks (a row already written in an earlier round is now detected
+      // as a duplicate and short-circuits before those checks run again),
+      // so `missingDorm`, `warnings`, and `addedProperties` are each a
+      // per-round partial result that must be combined across rounds -
+      // unlike `skippedDuplicate`/`skippedInvalid`, which re-scan the whole
+      // file every round and are already complete by the final one.
       let totalCreated = 0;
+      let totalMissingDorm = 0;
+      const allWarnings: string[] = [];
+      const addedPropertiesSoFar: string[] = [];
+
       for (;;) {
         const formData = new FormData();
         formData.append("file", file);
@@ -42,11 +53,19 @@ export default function ImportPage() {
 
         const roundSummary: ImportSummary = data.summary;
         totalCreated += roundSummary.created;
-        // Show live progress: each round's other stats (skipped/warnings)
-        // only become complete once the whole file has been scanned, which
-        // happens on the final round - `created` is accumulated across
-        // rounds so it keeps growing as batches complete.
-        setSummary({ ...roundSummary, created: totalCreated });
+        totalMissingDorm += roundSummary.missingDorm;
+        allWarnings.push(...roundSummary.warnings);
+        for (const p of roundSummary.addedProperties) {
+          if (!addedPropertiesSoFar.includes(p)) addedPropertiesSoFar.push(p);
+        }
+
+        setSummary({
+          ...roundSummary,
+          created: totalCreated,
+          missingDorm: totalMissingDorm,
+          warnings: allWarnings,
+          addedProperties: addedPropertiesSoFar,
+        });
 
         if (!roundSummary.hasMore) break;
       }
