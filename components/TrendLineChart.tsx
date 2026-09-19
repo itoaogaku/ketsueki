@@ -17,6 +17,23 @@ export interface SeriesSpec {
   color: string;
 }
 
+/** Recharts' default Y domain tends to include 0, which flattens series that
+ * only vary within a narrow band (e.g. Hb staying between 13-16) and hides
+ * real differences between lines. Fit the domain tightly around the actual
+ * plotted values instead, with a small margin so points near the top/bottom
+ * aren't clipped against the axis. */
+function fitDomain(data: Record<string, unknown>[], series: SeriesSpec[]): [number, number] {
+  const values = data.flatMap((row) =>
+    series.map((s) => row[s.key]).filter((v): v is number => typeof v === "number")
+  );
+  if (values.length === 0) return [0, 1];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return [min - 1, max + 1];
+  const margin = (max - min) * 0.1;
+  return [min - margin, max + margin];
+}
+
 export function TrendLineChart({
   data,
   series,
@@ -26,6 +43,7 @@ export function TrendLineChart({
   series: SeriesSpec[];
   unit?: string;
 }) {
+  const domain = fitDomain(data, series);
   return (
     <ResponsiveContainer width="100%" height={280}>
       <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -37,6 +55,7 @@ export function TrendLineChart({
           tickLine={false}
         />
         <YAxis
+          domain={domain}
           tick={{ fill: "var(--text-muted)", fontSize: 12 }}
           axisLine={{ stroke: "var(--axis)" }}
           tickLine={false}
