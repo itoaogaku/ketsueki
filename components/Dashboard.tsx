@@ -173,141 +173,6 @@ export function Dashboard({
 
       <DateLookupTable bloodData={bloodData} />
 
-      {/* Filters */}
-      <section
-        className="flex flex-wrap items-end gap-4 rounded-lg p-4"
-        style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}
-      >
-        <Field label="寮">
-          <select
-            className="select"
-            value={dorm}
-            onChange={(e) => setDorm(e.target.value as Dorm | "all")}
-          >
-            <option value="all">1寮生・2寮生 両方</option>
-            <option value="1寮生">1寮生のみ</option>
-            <option value="2寮生">2寮生のみ</option>
-          </select>
-        </Field>
-
-        <Field label="検査項目">
-          <select className="select" value={parameter} onChange={(e) => setParameter(e.target.value)}>
-            {bloodData.parameters.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="選手（未選択=全員）" wide>
-          <div
-            className="flex max-h-28 flex-wrap gap-1 overflow-y-auto rounded-md p-2"
-            style={{ border: "1px solid var(--border)", maxWidth: 420 }}
-          >
-            {players.map((p) => {
-              const active = selectedPlayers.includes(p);
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => togglePlayer(p)}
-                  className="rounded px-2 py-1 text-xs"
-                  style={{
-                    background: active ? "var(--brand)" : "transparent",
-                    color: active ? "#ffffff" : "var(--text-secondary)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  {p}
-                </button>
-              );
-            })}
-            {selectedPlayers.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectedPlayers([])}
-                className="rounded px-2 py-1 text-xs underline"
-                style={{ color: "var(--text-muted)" }}
-              >
-                選択解除
-              </button>
-            )}
-          </div>
-        </Field>
-      </section>
-
-      {/* Stat tiles */}
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatTile
-          label="直近月の平均値"
-          value={latest ? String(latest.average) : "—"}
-          hint={latest?.period}
-        />
-        <StatTile
-          label="前月比"
-          value={delta === null ? "—" : (delta > 0 ? "+" : "") + delta}
-        />
-        <StatTile label="対象選手数" value={String(filteredPlayerCount)} unit="人" />
-        <StatTile label="検査件数" value={String(totalCount)} unit="件" />
-      </section>
-
-      {/* Trend chart */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
-            {parameter} の推移{dorm === "all" ? "（1寮生 vs 2寮生）" : `（${dorm}）`}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setShowTable((v) => !v)}
-            className="text-xs underline"
-            style={{ color: "var(--text-muted)" }}
-          >
-            {showTable ? "グラフを表示" : "表で表示"}
-          </button>
-        </div>
-
-        {dorm === "all" ? (
-          showTable ? (
-            <DataTable
-              columns={[
-                { key: "period", label: "月" },
-                { key: "1寮生", label: "1寮生 平均", align: "right" },
-                { key: "2寮生", label: "2寮生 平均", align: "right" },
-              ]}
-              rows={dormComparison.map((d) => ({
-                period: d.period,
-                "1寮生": d["1寮生"] ?? "-",
-                "2寮生": d["2寮生"] ?? "-",
-              }))}
-            />
-          ) : (
-            <TrendLineChart
-              data={dormComparison}
-              series={[
-                { key: "1寮生", label: "1寮生", color: "var(--series-1)" },
-                { key: "2寮生", label: "2寮生", color: "var(--series-2)" },
-              ]}
-            />
-          )
-        ) : showTable ? (
-          <DataTable
-            columns={[
-              { key: "period", label: "月" },
-              { key: "average", label: "平均値", align: "right" },
-              { key: "count", label: "件数", align: "right" },
-            ]}
-            rows={trend}
-          />
-        ) : (
-          <TrendLineChart
-            data={trend}
-            series={[{ key: "average", label: parameter, color: "var(--series-1)" }]}
-          />
-        )}
-      </section>
-
       {/* 1寮生 vs 2寮生, by exact test date */}
       <GroupComparisonSection
         title="1寮生・2寮生の比較（検査日ごと）"
@@ -441,6 +306,141 @@ export function Dashboard({
             }))}
           />
         </div>
+      </section>
+
+      {/* Filters */}
+      <section
+        className="flex flex-wrap items-end gap-4 rounded-lg p-4"
+        style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}
+      >
+        <Field label="寮">
+          <select
+            className="select"
+            value={dorm}
+            onChange={(e) => setDorm(e.target.value as Dorm | "all")}
+          >
+            <option value="all">1寮生・2寮生 両方</option>
+            <option value="1寮生">1寮生のみ</option>
+            <option value="2寮生">2寮生のみ</option>
+          </select>
+        </Field>
+
+        <Field label="検査項目">
+          <select className="select" value={parameter} onChange={(e) => setParameter(e.target.value)}>
+            {bloodData.parameters.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="選手（未選択=全員）" wide>
+          <div
+            className="flex max-h-28 flex-wrap gap-1 overflow-y-auto rounded-md p-2"
+            style={{ border: "1px solid var(--border)", maxWidth: 420 }}
+          >
+            {players.map((p) => {
+              const active = selectedPlayers.includes(p);
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => togglePlayer(p)}
+                  className="rounded px-2 py-1 text-xs"
+                  style={{
+                    background: active ? "var(--brand)" : "transparent",
+                    color: active ? "#ffffff" : "var(--text-secondary)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            {selectedPlayers.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedPlayers([])}
+                className="rounded px-2 py-1 text-xs underline"
+                style={{ color: "var(--text-muted)" }}
+              >
+                選択解除
+              </button>
+            )}
+          </div>
+        </Field>
+      </section>
+
+      {/* Stat tiles */}
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatTile
+          label="直近月の平均値"
+          value={latest ? String(latest.average) : "—"}
+          hint={latest?.period}
+        />
+        <StatTile
+          label="前月比"
+          value={delta === null ? "—" : (delta > 0 ? "+" : "") + delta}
+        />
+        <StatTile label="対象選手数" value={String(filteredPlayerCount)} unit="人" />
+        <StatTile label="検査件数" value={String(totalCount)} unit="件" />
+      </section>
+
+      {/* Trend chart */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
+            {parameter} の推移{dorm === "all" ? "（1寮生 vs 2寮生）" : `（${dorm}）`}
+          </h2>
+          <button
+            type="button"
+            onClick={() => setShowTable((v) => !v)}
+            className="text-xs underline"
+            style={{ color: "var(--text-muted)" }}
+          >
+            {showTable ? "グラフを表示" : "表で表示"}
+          </button>
+        </div>
+
+        {dorm === "all" ? (
+          showTable ? (
+            <DataTable
+              columns={[
+                { key: "period", label: "月" },
+                { key: "1寮生", label: "1寮生 平均", align: "right" },
+                { key: "2寮生", label: "2寮生 平均", align: "right" },
+              ]}
+              rows={dormComparison.map((d) => ({
+                period: d.period,
+                "1寮生": d["1寮生"] ?? "-",
+                "2寮生": d["2寮生"] ?? "-",
+              }))}
+            />
+          ) : (
+            <TrendLineChart
+              data={dormComparison}
+              series={[
+                { key: "1寮生", label: "1寮生", color: "var(--series-1)" },
+                { key: "2寮生", label: "2寮生", color: "var(--series-2)" },
+              ]}
+            />
+          )
+        ) : showTable ? (
+          <DataTable
+            columns={[
+              { key: "period", label: "月" },
+              { key: "average", label: "平均値", align: "right" },
+              { key: "count", label: "件数", align: "right" },
+            ]}
+            rows={trend}
+          />
+        ) : (
+          <TrendLineChart
+            data={trend}
+            series={[{ key: "average", label: parameter, color: "var(--series-1)" }]}
+          />
+        )}
       </section>
     </div>
   );
