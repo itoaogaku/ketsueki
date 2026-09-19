@@ -97,16 +97,43 @@ export interface DateNormalization {
 }
 
 /**
+ * A few testing rounds needed a manual call the player-count threshold
+ * can't make on its own:
+ * - 2022年4月18〜23日 was one round spread across several low-turnout days;
+ *   2022-04-26 (1 player) is 8 days out, just past the automatic ±7-day
+ *   window, so it's named explicitly.
+ * - 2023-07-24 (30 players) fell just under the 40-player anchor threshold.
+ * Naming a date here promotes it to an anchor even under the threshold, and
+ * every other date within `windowDays` still folds into it automatically -
+ * so 2022-04-19〜23 don't need to be listed, only the explicit 04-26.
+ */
+export const MANUAL_ANCHOR_DATES = ["2022-04-18", "2023-07-24"];
+export const MANUAL_DATE_MERGES: Record<string, string> = {
+  "2022-04-26": "2022-04-18",
+};
+
+/**
  * Groups test dates around "main testing days" so a handful of players who
  * tested late (a make-up day for whoever missed the main round) don't show
  * up as their own thin, misleading data point. A date with at least
- * `anchorMinPlayers` distinct players tested is an anchor; any other date
- * within `windowDays` of the nearest anchor is folded into it; anything
- * further out is dropped from date-based comparisons entirely.
+ * `anchorMinPlayers` distinct players tested, or named in `manualAnchors`,
+ * is an anchor; any other date within `windowDays` of the nearest anchor -
+ * or named in `manualMerges` - is folded into it; anything further out is
+ * dropped from date-based comparisons entirely.
  */
 export function buildDateNormalization(
   records: BloodTestRecord[],
-  { anchorMinPlayers = 40, windowDays = 7 }: { anchorMinPlayers?: number; windowDays?: number } = {}
+  {
+    anchorMinPlayers = 40,
+    windowDays = 7,
+    manualAnchors = MANUAL_ANCHOR_DATES,
+    manualMerges = MANUAL_DATE_MERGES,
+  }: {
+    anchorMinPlayers?: number;
+    windowDays?: number;
+    manualAnchors?: string[];
+    manualMerges?: Record<string, string>;
+  } = {}
 ): DateNormalization {
   const playersByDate = new Map<string, Set<string>>();
   for (const r of records) {
@@ -115,7 +142,10 @@ export function buildDateNormalization(
   }
   const allDates = Array.from(playersByDate.keys()).sort();
   const toMs = (d: string) => new Date(`${d}T00:00:00Z`).getTime();
-  const anchors = allDates.filter((d) => playersByDate.get(d)!.size >= anchorMinPlayers);
+  const manualAnchorSet = new Set(manualAnchors);
+  const anchors = allDates.filter(
+    (d) => playersByDate.get(d)!.size >= anchorMinPlayers || manualAnchorSet.has(d)
+  );
   const anchorTimes = anchors.map(toMs);
 
   const toAnchor = new Map<string, string>();
@@ -125,6 +155,11 @@ export function buildDateNormalization(
     if (anchors.includes(d)) {
       toAnchor.set(d, d);
       entries.push({ date: d, playerCount, status: "anchor" });
+      continue;
+    }
+    if (manualMerges[d]) {
+      toAnchor.set(d, manualMerges[d]);
+      entries.push({ date: d, playerCount, status: "merged", mergedInto: manualMerges[d] });
       continue;
     }
     const t = toMs(d);
