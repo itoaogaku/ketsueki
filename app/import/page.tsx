@@ -29,9 +29,13 @@ export default function ImportPage() {
       // checks (a row already written in an earlier round is now detected
       // as a duplicate and short-circuits before those checks run again),
       // so `missingDorm`, `warnings`, and `addedProperties` are each a
-      // per-round partial result that must be combined across rounds -
-      // unlike `skippedDuplicate`/`skippedInvalid`, which re-scan the whole
-      // file every round and are already complete by the final one.
+      // per-round partial result that must be combined across rounds. And
+      // `skippedDuplicate` can't be combined at all: each round re-scans
+      // the whole file from row one, so a row this same import already
+      // wrote in an earlier round shows up as a duplicate again on every
+      // later round - the true count is derived from `totalRows` instead,
+      // which (like `skippedInvalid`) is a fixed property of the file and
+      // doesn't grow with the round count.
       let totalCreated = 0;
       let totalMissingDorm = 0;
       const allWarnings: string[] = [];
@@ -65,6 +69,7 @@ export default function ImportPage() {
           missingDorm: totalMissingDorm,
           warnings: allWarnings,
           addedProperties: addedPropertiesSoFar,
+          skippedDuplicate: roundSummary.totalRows - totalCreated - roundSummary.skippedInvalid,
         });
 
         if (!roundSummary.hasMore) break;

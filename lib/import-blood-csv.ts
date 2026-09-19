@@ -10,7 +10,18 @@ const DORM_VALUES = new Set<string>(DORM_OPTIONS);
 export interface ImportSummary {
   paramColumns: string[];
   addedProperties: string[];
+  /** Total data rows in the CSV (valid + invalid) - constant across every
+   * batch of a multi-round import, so the caller can derive how many rows
+   * are duplicates as `totalRows - created - skippedInvalid` once `created`
+   * is summed across rounds (see the note on `skippedDuplicate` below). */
+  totalRows: number;
   created: number;
+  /** Only meaningful for a single, non-batched call (e.g. dry runs, or the
+   * CLI script). A batched call re-scans the whole file from row one every
+   * round, so a row already written in an earlier round of the SAME import
+   * shows up here as a duplicate again - across many rounds this massively
+   * overcounts. The /import page derives the true total instead; this field
+   * is kept only for the CLI's single-pass summary. */
   skippedDuplicate: number;
   skippedInvalid: number;
   missingDorm: number;
@@ -118,23 +129,32 @@ export async function importBloodCsv(
     cursor = res.has_more ? (res.next_cursor ?? undefined) : undefined;
   } while (cursor);
 
-  let created = 0;
-  let skippedDuplicate = 0;
+  // Split valid/invalid up front so `skippedInvalid` (and therefore
+  // `totalRows`) is the same on every round regardless of where `maxCreate`
+  // cuts a given call off - unlike the main loop below, this always scans
+  // the complete file.
+  const validRows: { player: string; date: string; row: Record<string, string> }[] = [];
   let skippedInvalid = 0;
-  let missingDorm = 0;
-  let hasMore = false;
-
   for (const row of parsed.data) {
-    if (!dryRun && maxCreate !== undefined && created >= maxCreate) {
-      hasMore = true;
-      break;
-    }
-
     const player = row["選手名"]?.trim();
     const date = row["検査日"]?.trim();
     if (!player || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
       skippedInvalid++;
-      continue;
+    } else {
+      validRows.push({ player, date, row });
+    }
+  }
+  const totalRows = parsed.data.length;
+
+  let created = 0;
+  let skippedDuplicate = 0;
+  let missingDorm = 0;
+  let hasMore = false;
+
+  for (const { player, date, row } of validRows) {
+    if (!dryRun && maxCreate !== undefined && created >= maxCreate) {
+      hasMore = true;
+      break;
     }
 
     const key = `${player}__${date}`;
@@ -181,6 +201,7 @@ export async function importBloodCsv(
   return {
     paramColumns,
     addedProperties,
+    totalRows,
     created,
     skippedDuplicate,
     skippedInvalid,
