@@ -1,5 +1,6 @@
 import { Client } from "@notionhq/client";
 import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
+import { unstable_cache } from "next/cache";
 import { generateSampleBloodData, generateSampleGameResults } from "./sample-data";
 import type {
   BloodDataResponse,
@@ -143,18 +144,28 @@ function uniqueSorted(values: Iterable<string>): string[] {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ja"));
 }
 
-export async function fetchBloodData(): Promise<BloodDataResponse> {
-  if (!isBloodNotionConfigured()) {
-    const records = generateSampleBloodData();
-    return buildBloodResponse(records, "sample");
-  }
-  const pages = await queryAllPages(BLOOD_DB_ID!);
-  const records = pages
-    .map(extractBloodRecord)
-    .filter((r) => r.date && r.player)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  return buildBloodResponse(records, "notion");
-}
+/** Fetching every row from Notion (paginated, several round trips) gets
+ * slower as the database grows, so the result is cached for a minute rather
+ * than re-fetched on every page view - a fresh import shows up within that
+ * window rather than instantly. This wraps the function (not the page/route)
+ * so it only runs at request time, never during `next build`, which in this
+ * project's sandboxed dev environment has no route to api.notion.com. */
+export const fetchBloodData = unstable_cache(
+  async (): Promise<BloodDataResponse> => {
+    if (!isBloodNotionConfigured()) {
+      const records = generateSampleBloodData();
+      return buildBloodResponse(records, "sample");
+    }
+    const pages = await queryAllPages(BLOOD_DB_ID!);
+    const records = pages
+      .map(extractBloodRecord)
+      .filter((r) => r.date && r.player)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return buildBloodResponse(records, "notion");
+  },
+  ["blood-data"],
+  { revalidate: 60 }
+);
 
 function buildBloodResponse(
   records: BloodTestRecord[],
@@ -170,18 +181,22 @@ function buildBloodResponse(
   };
 }
 
-export async function fetchGameResults(): Promise<GameResultsResponse> {
-  if (!isGamesNotionConfigured()) {
-    const records = generateSampleGameResults();
-    return buildGameResponse(records, "sample");
-  }
-  const pages = await queryAllPages(GAMES_DB_ID!);
-  const records = pages
-    .map(extractGameRecord)
-    .filter((r) => r.date)
-    .sort((a, b) => a.date.localeCompare(b.date));
-  return buildGameResponse(records, "notion");
-}
+export const fetchGameResults = unstable_cache(
+  async (): Promise<GameResultsResponse> => {
+    if (!isGamesNotionConfigured()) {
+      const records = generateSampleGameResults();
+      return buildGameResponse(records, "sample");
+    }
+    const pages = await queryAllPages(GAMES_DB_ID!);
+    const records = pages
+      .map(extractGameRecord)
+      .filter((r) => r.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return buildGameResponse(records, "notion");
+  },
+  ["game-results"],
+  { revalidate: 60 }
+);
 
 function buildGameResponse(
   records: GameResultRecord[],
