@@ -177,6 +177,8 @@ export function Dashboard({
 
       <DateLookupTable bloodData={bloodData} />
 
+      <PlayerTrendChart bloodData={bloodData} />
+
       {/* 1寮生 vs 2寮生, by exact test date */}
       <GroupComparisonSection
         title="1寮生・2寮生の比較（検査日ごと）"
@@ -192,8 +194,6 @@ export function Dashboard({
         parameters={bloodData.parameters}
         groups={GRADE_COMPARISON_GROUPS}
       />
-
-      <PlayerTrendChart bloodData={bloodData} />
 
       {/* Correlation with game results */}
       <section className="space-y-4">
