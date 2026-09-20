@@ -214,13 +214,19 @@ async function fetchMemberBirthdates(): Promise<Map<string, string>> {
  * and reports which players couldn't be matched to the 部員データベース at
  * all (typo, different name formatting, not yet added to the roster) - for
  * them this silently falls back to the old per-row 学年 behaviour, which is
- * easy to mistake for the new logic "not working" unless it's surfaced. */
-async function applyComputedGrades(records: BloodTestRecord[]): Promise<{
+ * easy to mistake for the new logic "not working" unless it's surfaced.
+ *
+ * Takes the already-fetched birthdate map rather than fetching it itself, so
+ * the caller can run that Notion round trip concurrently with the blood-data
+ * one instead of waiting for it to finish first. */
+function applyComputedGrades(
+  records: BloodTestRecord[],
+  birthdates: Map<string, string>
+): {
   records: BloodTestRecord[];
   enteringYearByPlayer: Record<string, number>;
   unmatchedPlayers: string[];
-}> {
-  const birthdates = await fetchMemberBirthdates();
+} {
   const enteringYearByKey = new Map<string, number>();
   const enteringYearByPlayer: Record<string, number> = {};
   const latestUnmatchedDate = new Map<string, string>();
@@ -263,26 +269,35 @@ async function applyComputedGrades(records: BloodTestRecord[]): Promise<{
 }
 
 /** Fetching every row from Notion (paginated, several round trips) gets
- * slower as the database grows, so the result is cached for a minute rather
- * than re-fetched on every page view - a fresh import shows up within that
- * window rather than instantly. This wraps the function (not the page/route)
- * so it only runs at request time, never during `next build`, which in this
- * project's sandboxed dev environment has no route to api.notion.com. */
+ * slower as the database grows, so the result is cached rather than
+ * re-fetched on every page view - a fresh import shows up within that
+ * window rather than instantly. 5 minutes (rather than the original 1) cuts
+ * how often a visitor lands on an uncached request and has to wait out the
+ * full Notion round trip themselves, since this data changes at most a few
+ * times a day. This wraps the function (not the page/route) so it only runs
+ * at request time, never during `next build`, which in this project's
+ * sandboxed dev environment has no route to api.notion.com. */
 export const fetchBloodData = unstable_cache(
   async (): Promise<BloodDataResponse> => {
     if (!isBloodNotionConfigured()) {
       const records = generateSampleBloodData();
       return buildBloodResponse(records, "sample");
     }
-    const pages = await queryAllPages(BLOOD_DB_ID!);
+    // Independent Notion round trips - run concurrently rather than
+    // waiting for the (paginated, possibly several-request) blood fetch to
+    // finish before even starting the members one.
+    const [pages, birthdates] = await Promise.all([
+      queryAllPages(BLOOD_DB_ID!),
+      isMembersNotionConfigured() ? fetchMemberBirthdates() : Promise.resolve(null),
+    ]);
     let records = pages
       .map(extractBloodRecord)
       .filter((r) => r.date && r.player)
       .sort((a, b) => a.date.localeCompare(b.date));
     let unmatchedGradePlayers: string[] | undefined;
     let playerEnteringYear: Record<string, number> | undefined;
-    if (isMembersNotionConfigured()) {
-      const result = await applyComputedGrades(records);
+    if (birthdates) {
+      const result = applyComputedGrades(records, birthdates);
       records = result.records;
       unmatchedGradePlayers = result.unmatchedPlayers;
       playerEnteringYear = result.enteringYearByPlayer;
@@ -290,7 +305,7 @@ export const fetchBloodData = unstable_cache(
     return buildBloodResponse(records, "notion", unmatchedGradePlayers, playerEnteringYear);
   },
   ["blood-data"],
-  { revalidate: 60 }
+  { revalidate: 300 }
 );
 
 function buildBloodResponse(
@@ -325,7 +340,7 @@ export const fetchGameResults = unstable_cache(
     return buildGameResponse(records, "notion");
   },
   ["game-results"],
-  { revalidate: 60 }
+  { revalidate: 300 }
 );
 
 function buildGameResponse(
