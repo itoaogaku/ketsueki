@@ -1,6 +1,7 @@
 import { Client } from "@notionhq/client";
 import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
 import { unstable_cache } from "next/cache";
+import { enteringYearFromBirthdate, gradeAtDate } from "./grade";
 import { generateSampleBloodData, generateSampleGameResults } from "./sample-data";
 import type {
   BloodDataResponse,
@@ -14,6 +15,7 @@ import type {
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const BLOOD_DB_ID = process.env.NOTION_BLOOD_DATABASE_ID;
 const GAMES_DB_ID = process.env.NOTION_GAMES_DATABASE_ID;
+const MEMBERS_DB_ID = process.env.NOTION_MEMBERS_DATABASE_ID;
 
 export function isBloodNotionConfigured(): boolean {
   return Boolean(NOTION_TOKEN && BLOOD_DB_ID);
@@ -21,6 +23,10 @@ export function isBloodNotionConfigured(): boolean {
 
 export function isGamesNotionConfigured(): boolean {
   return Boolean(NOTION_TOKEN && GAMES_DB_ID);
+}
+
+export function isMembersNotionConfigured(): boolean {
+  return Boolean(NOTION_TOKEN && MEMBERS_DB_ID);
 }
 
 let cachedClient: Client | null = null;
@@ -163,6 +169,47 @@ function uniqueSorted(values: Iterable<string>): string[] {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ja"));
 }
 
+/** 選手名 -> 生年月日 (ISO yyyy-mm-dd) from the 部員データベース. Only players
+ * registered there get a computed grade; anyone else falls back to the
+ * grade hand-entered on their own blood-test row (unchanged, previous
+ * behaviour). */
+async function fetchMemberBirthdates(): Promise<Map<string, string>> {
+  const pages = await queryAllPages(MEMBERS_DB_ID!);
+  const map = new Map<string, string>();
+  for (const page of pages) {
+    const name = getPlainTitle(page);
+    if (!name) continue;
+    for (const [propName, prop] of Object.entries(page.properties)) {
+      if (prop.type === "date" && prop.date?.start && /生年月日/.test(propName)) {
+        map.set(name, prop.date.start.slice(0, 10));
+        break;
+      }
+    }
+  }
+  return map;
+}
+
+/** Replaces each record's grade with one computed from the player's
+ * birthdate (in the 部員データベース) and the record's own test date,
+ * rather than trusting the 学年 hand-entered on that individual blood-test
+ * row - which drifts out of date as a player advances a year and older
+ * rows don't get updated, causing the grade shown next to a player's name
+ * to silently stop matching reality. */
+async function applyComputedGrades(records: BloodTestRecord[]): Promise<BloodTestRecord[]> {
+  const birthdates = await fetchMemberBirthdates();
+  const enteringYearByPlayer = new Map<string, number>();
+  return records.map((r) => {
+    const birthdate = birthdates.get(r.player);
+    if (!birthdate) return r;
+    let enteringYear = enteringYearByPlayer.get(r.player);
+    if (enteringYear === undefined) {
+      enteringYear = enteringYearFromBirthdate(birthdate);
+      enteringYearByPlayer.set(r.player, enteringYear);
+    }
+    return { ...r, grade: gradeAtDate(enteringYear, r.date) };
+  });
+}
+
 /** Fetching every row from Notion (paginated, several round trips) gets
  * slower as the database grows, so the result is cached for a minute rather
  * than re-fetched on every page view - a fresh import shows up within that
@@ -176,10 +223,13 @@ export const fetchBloodData = unstable_cache(
       return buildBloodResponse(records, "sample");
     }
     const pages = await queryAllPages(BLOOD_DB_ID!);
-    const records = pages
+    let records = pages
       .map(extractBloodRecord)
       .filter((r) => r.date && r.player)
       .sort((a, b) => a.date.localeCompare(b.date));
+    if (isMembersNotionConfigured()) {
+      records = await applyComputedGrades(records);
+    }
     return buildBloodResponse(records, "notion");
   },
   ["blood-data"],
