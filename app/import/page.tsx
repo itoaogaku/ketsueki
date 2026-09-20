@@ -12,13 +12,13 @@ import type { PrepareWaSyncResult, PreparedWaRow } from "@/lib/sync-wa-scores";
 // the endpoint (already-written rows are recognized and skipped) until done.
 const BATCH_SIZE = 10;
 
-// Same batching reasoning as BATCH_SIZE above, but larger: writing a WA
-// score batch has no per-row schema-detection work (no dynamically-added
-// Number properties to check/create) the way the CSV import does, and -
-// unlike it - doesn't re-read the whole source database on every batch (see
-// lib/sync-wa-scores.ts), so more rows fit in one serverless invocation
-// before hitting its time limit.
-const WA_BATCH_SIZE = 100;
+// Kept deliberately small: each Notion write in a batch takes an unknown,
+// possibly-slow amount of real network time (a couple of failed attempts at
+// 100/batch still ran into the serverless function's time limit even with
+// no re-reading of the source database - see lib/sync-wa-scores.ts), so this
+// errs on the side of finishing many small, reliable requests over risking
+// another timeout with a larger one.
+const WA_BATCH_SIZE = 25;
 
 interface WaSyncDisplaySummary {
   totalSourceRows: number;
@@ -28,6 +28,7 @@ interface WaSyncDisplaySummary {
   warnings: string[];
   created: number;
   updated: number;
+  targetTotal: number;
   dryRun: boolean;
 }
 
@@ -41,6 +42,7 @@ export default function ImportPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [waLoading, setWaLoading] = useState(false);
+  const [waPhase, setWaPhase] = useState<string | null>(null);
   const [waSummary, setWaSummary] = useState<WaSyncDisplaySummary | null>(null);
   const [waError, setWaError] = useState<string | null>(null);
 
@@ -48,6 +50,9 @@ export default function ImportPage() {
     setWaLoading(true);
     setWaError(null);
     setWaSummary(null);
+    setWaPhase("準備中（競技結果データベースを読み込んでいます）...");
+    let totalCreated = 0;
+    let totalUpdated = 0;
     try {
       const prepareRes = await fetch("/api/sync-wa-scores", {
         method: "POST",
@@ -56,7 +61,7 @@ export default function ImportPage() {
       });
       const prepareData = await prepareRes.json();
       if (!prepareRes.ok) {
-        setWaError(prepareData.error ?? "同期に失敗しました");
+        setWaError(`準備段階で失敗: ${prepareData.error ?? "不明なエラー"}`);
         return;
       }
       const prepared: PrepareWaSyncResult = prepareData.result;
@@ -67,6 +72,7 @@ export default function ImportPage() {
         outOfScope: prepared.outOfScope,
         unparseable: prepared.unparseable,
         warnings: prepared.warnings,
+        targetTotal: prepared.rows.length,
         dryRun: waDryRun,
       };
 
@@ -77,10 +83,11 @@ export default function ImportPage() {
         return;
       }
 
-      let totalCreated = 0;
-      let totalUpdated = 0;
+      setWaSummary({ ...base, created: 0, updated: 0 });
+
       for (let i = 0; i < prepared.rows.length; i += WA_BATCH_SIZE) {
         const batch: PreparedWaRow[] = prepared.rows.slice(i, i + WA_BATCH_SIZE);
+        setWaPhase(`書き込み中... (${totalCreated + totalUpdated}/${prepared.rows.length}件)`);
         const writeRes = await fetch("/api/sync-wa-scores", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -88,7 +95,9 @@ export default function ImportPage() {
         });
         const writeData = await writeRes.json();
         if (!writeRes.ok) {
-          setWaError(writeData.error ?? "同期に失敗しました");
+          setWaError(
+            `書き込み中に失敗（${totalCreated + totalUpdated}/${prepared.rows.length}件まで完了）: ${writeData.error ?? "不明なエラー"}`
+          );
           return;
         }
         const round: { created: number; updated: number } = writeData.result;
@@ -97,9 +106,10 @@ export default function ImportPage() {
         setWaSummary({ ...base, created: totalCreated, updated: totalUpdated });
       }
     } catch {
-      setWaError("通信エラーが発生しました");
+      setWaError(`通信エラーが発生しました（${totalCreated + totalUpdated}件まで完了している可能性があります）`);
     } finally {
       setWaLoading(false);
+      setWaPhase(null);
     }
   };
 
@@ -325,7 +335,7 @@ export default function ImportPage() {
             className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
             style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}
           >
-            {waLoading ? "処理中..." : "内容を確認（書き込まない）"}
+            {waLoading ? waPhase ?? "処理中..." : "内容を確認（書き込まない）"}
           </button>
           <button
             type="button"
@@ -334,11 +344,7 @@ export default function ImportPage() {
             className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
             style={{ background: "var(--brand)", color: "#ffffff" }}
           >
-            {waLoading
-              ? waSummary
-                ? `処理中... (${waSummary.created + waSummary.updated}件処理)`
-                : "処理中..."
-              : "Notionに反映"}
+            {waLoading ? waPhase ?? "処理中..." : "Notionに反映"}
           </button>
         </div>
 
@@ -357,6 +363,9 @@ export default function ImportPage() {
               {waSummary.totalSourceRows}件中 {waSummary.parsedRows}件から選手名・日付・種目・結果を取得しました
             </p>
             <ul className="space-y-0.5">
+              {!waSummary.dryRun && (
+                <li>進捗: {waSummary.created + waSummary.updated} / {waSummary.targetTotal}件</li>
+              )}
               <li>{waSummary.dryRun ? "作成予定" : "作成"}: {waSummary.created}件</li>
               <li>{waSummary.dryRun ? "更新予定" : "更新"}: {waSummary.updated}件</li>
               <li style={{ color: "var(--text-secondary)" }}>
