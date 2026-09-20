@@ -60,7 +60,7 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
 
   const [date, setDate] = useState(selectableDates[0]?.date ?? "");
   const [sortParam, setSortParam] = useState("");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const selected = selectableDates.find((e) => e.date === date);
 
