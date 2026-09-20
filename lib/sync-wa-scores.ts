@@ -13,6 +13,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Normalizes the 競技結果DB's 性別 select value to the "m"/"f" the WA
+ * scoring tables use (men's and women's tables score the same time very
+ * differently, so getting this right matters, not just cosmetic - see
+ * lib/wa-scoring.ts). Unrecognized/missing values fall back to "m", same as
+ * computeWaPoints's own default, since that was this app's original
+ * (implicit, men's-team-only) assumption. */
+function normalizeGender(raw: string | null): "m" | "f" {
+  if (raw && /女/.test(raw)) return "f";
+  return "m";
+}
+
 interface RawResultRow {
   /** Resolved directly from a title/rich_text/people 選手 property - null
    * when it's a relation instead, in which case `playerRelationId` names the
@@ -21,6 +32,7 @@ interface RawResultRow {
    * own Notion API calls the per-row extraction here can't make. */
   player: string | null;
   playerRelationId: string | null;
+  gender: "m" | "f";
   date: string;
   event: string;
   resultText: string;
@@ -39,6 +51,7 @@ interface RawResultRow {
 function extractRawResultRow(page: PageObjectResponse): RawResultRow | null {
   let player: string | null = null;
   let playerRelationId: string | null = null;
+  let genderRaw: string | null = null;
   let date = "";
   let event = "";
   let resultText = "";
@@ -54,6 +67,9 @@ function extractRawResultRow(page: PageObjectResponse): RawResultRow | null {
         const person = prop.people[0];
         player = "name" in person ? (person.name ?? null) : null;
       }
+    } else if (/性別/.test(name)) {
+      if (prop.type === "select" && prop.select?.name) genderRaw = prop.select.name;
+      else if (prop.type === "rich_text") genderRaw = prop.rich_text.map((t) => t.plain_text).join("");
     } else if (/種目/.test(name)) {
       if (prop.type === "select" && prop.select?.name) event = prop.select.name;
       else if (prop.type === "rich_text") event = prop.rich_text.map((t) => t.plain_text).join("");
@@ -64,7 +80,7 @@ function extractRawResultRow(page: PageObjectResponse): RawResultRow | null {
   }
 
   if ((!player && !playerRelationId) || !date || !event || !resultText) return null;
-  return { player, playerRelationId, date, event, resultText };
+  return { player, playerRelationId, gender: normalizeGender(genderRaw), date, event, resultText };
 }
 
 /** Resolves each row's `playerRelationId` (a 部員データベース page id, say)
@@ -73,7 +89,7 @@ function extractRawResultRow(page: PageObjectResponse): RawResultRow | null {
  * Rows whose 選手 column already held a plain name need no resolution. */
 async function resolvePlayerNames(
   rows: RawResultRow[]
-): Promise<{ player: string; date: string; event: string; resultText: string }[]> {
+): Promise<{ player: string; gender: "m" | "f"; date: string; event: string; resultText: string }[]> {
   const relationIds = Array.from(
     new Set(rows.filter((r) => r.playerRelationId).map((r) => r.playerRelationId!))
   );
@@ -100,11 +116,11 @@ async function resolvePlayerNames(
     }
   }
 
-  const resolved: { player: string; date: string; event: string; resultText: string }[] = [];
+  const resolved: { player: string; gender: "m" | "f"; date: string; event: string; resultText: string }[] = [];
   for (const row of rows) {
     const player = row.player ?? (row.playerRelationId ? nameById.get(row.playerRelationId) : undefined);
     if (!player) continue; // couldn't resolve the relation - skip rather than write a blank name
-    resolved.push({ player, date: row.date, event: row.event, resultText: row.resultText });
+    resolved.push({ player, gender: row.gender, date: row.date, event: row.event, resultText: row.resultText });
   }
   return resolved;
 }
@@ -119,6 +135,7 @@ function dedupeKey(row: { player: string; date: string; event: string }): string
  * out per batch instead. */
 export interface PreparedWaRow {
   player: string;
+  gender: "m" | "f";
   date: string;
   event: string;
   resultText: string;
@@ -179,7 +196,7 @@ export async function prepareWaScoreSync(): Promise<PrepareWaSyncResult> {
       outOfScope++;
       continue;
     }
-    const computed = computeWaPoints(row.event, row.resultText);
+    const computed = computeWaPoints(row.event, row.resultText, row.gender);
     if (!computed) {
       unparseable++;
       warnings.push(
@@ -258,6 +275,7 @@ export async function writeWaScoreBatch(
     const existingPageId = existingKeys.get(dedupeKey(row));
     const properties = {
       選手名: { title: [{ text: { content: row.player } }] },
+      性別: { select: { name: row.gender === "f" ? "女子" : "男子" } },
       日付: { date: { start: row.date } },
       競技種目: { select: { name: row.event } },
       競技結果: { rich_text: [{ text: { content: row.resultText } }] },

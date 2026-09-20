@@ -130,6 +130,15 @@ async function main() {
       initial_data_source: {
         properties: {
           選手名: { type: "title", title: {} },
+          性別: {
+            type: "select",
+            select: {
+              options: [
+                { name: "男子", color: "blue" },
+                { name: "女子", color: "pink" },
+              ],
+            },
+          },
           日付: { type: "date", date: {} },
           競技種目: {
             type: "select",
