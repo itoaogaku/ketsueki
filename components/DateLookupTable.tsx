@@ -87,7 +87,12 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
       byPlayer.get(r.player)!.push(r);
     }
     for (const records of byPlayer.values()) records.sort((a, b) => a.date.localeCompare(b.date));
-    return Array.from(byPlayer.entries()).map(([player, records]) => ({ player, records }));
+    // A player can have a record for the day (dorm/学年 filled in) with no
+    // actual test values entered - skip those rather than showing a blank
+    // column.
+    return Array.from(byPlayer.entries())
+      .filter(([, records]) => records.some((r) => Object.keys(r.values).length > 0))
+      .map(([player, records]) => ({ player, records }));
   }, [dayRecords]);
 
   const sortableParams = useMemo(() => {
