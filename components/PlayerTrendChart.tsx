@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { gradeAtDate } from "@/lib/grade";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
 import { compareByGradeThenRosterName } from "@/lib/player-roster";
 import { REFERENCE_RANGES } from "@/lib/reference-ranges";
@@ -30,29 +31,51 @@ function colorForIndex(i: number): string {
  * once for a quick squad-wide comparison; individual players can still be
  * added or removed from there. */
 export function PlayerTrendChart({ bloodData }: { bloodData: BloodDataResponse }) {
-  // 卒業済みの先輩の記録は除き、在校生（2023〜2026年度入学）だけを対象にする。
-  const currentPlayers = useMemo(() => {
-    const enteringYear = new Map<string, number>();
-    for (const r of bloodData.records) {
-      if (enteringYear.has(r.player)) continue;
-      const y = enteringAcademicYear(r);
-      if (y !== null) enteringYear.set(r.player, y);
+  // 各選手の入学年度。部員データベースで一致した選手はサーバー側で生年月日
+  // から計算済みの値を使い、一致しなかった選手は血液検査データベースの
+  // 学年+検査日から逆算する（従来どおりのフォールバック）。
+  const enteringYearByPlayer = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [player, year] of Object.entries(bloodData.playerEnteringYear ?? {})) {
+      map.set(player, year);
     }
-    return bloodData.players.filter((p) => {
-      const y = enteringYear.get(p);
-      return y !== undefined && CURRENT_STUDENT_ENTERING_YEARS.includes(y);
-    });
-  }, [bloodData.players, bloodData.records]);
+    for (const r of bloodData.records) {
+      if (map.has(r.player)) continue;
+      const y = enteringAcademicYear(r);
+      if (y !== null) map.set(r.player, y);
+    }
+    return map;
+  }, [bloodData.records, bloodData.playerEnteringYear]);
 
-  // Same 4年→1年・名簿順のグループ順を他の選手一覧（検査日で一覧など）に
-  // 合わせる。学年は各選手の最新の記録から拾う。
+  // 卒業済みの先輩の記録は除き、在校生（2023〜2026年度入学）だけを対象にする。
+  const currentPlayers = useMemo(
+    () =>
+      bloodData.players.filter((p) => {
+        const y = enteringYearByPlayer.get(p);
+        return y !== undefined && CURRENT_STUDENT_ENTERING_YEARS.includes(y);
+      }),
+    [bloodData.players, enteringYearByPlayer]
+  );
+
+  // その選手の「今の」学年。直近の検査を受けていない選手でも学年が古いまま
+  // にならないよう、記録全体の最新日を基準に入学年度から計算する（最後に
+  // 検査を受けた時点の学年をそのまま使うと、その選手だけ1学年古く見える
+  // ことがあった）。入学年度が分からない選手だけ、最新の検査記録の学年に
+  // フォールバックする。
   const latestGrade = useMemo(() => {
     const map = new Map<string, Grade | null>();
     for (const r of [...bloodData.records].sort((a, b) => a.date.localeCompare(b.date))) {
       if (r.grade) map.set(r.player, r.grade);
     }
+    const mostRecentDate = bloodData.records.reduce((max, r) => (r.date > max ? r.date : max), "");
+    if (mostRecentDate) {
+      for (const [player, enteringYear] of enteringYearByPlayer) {
+        const currentGrade = gradeAtDate(enteringYear, mostRecentDate);
+        if (currentGrade) map.set(player, currentGrade);
+      }
+    }
     return map;
-  }, [bloodData.records]);
+  }, [bloodData.records, enteringYearByPlayer]);
 
   const sortedPlayers = useMemo(
     () =>

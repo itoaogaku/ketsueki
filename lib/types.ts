@@ -40,6 +40,13 @@ export interface BloodDataResponse {
    * missing roster entry) can be spotted and fixed at the source instead of
    * silently producing a wrong grade. */
   unmatchedGradePlayers?: string[];
+  /** 選手名 -> the academic year they entered university, for players
+   * matched to the 部員データベース. Lets a UI compute "what grade are they
+   * *right now*" directly (via lib/grade.ts's gradeAtDate) instead of
+   * reading whatever grade their most recent test record happened to show -
+   * which understates a player's grade if they weren't tested in the
+   * latest round. */
+  playerEnteringYear?: Record<string, number>;
 }
 
 export interface GameResultsResponse {

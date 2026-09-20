@@ -206,27 +206,23 @@ async function fetchMemberBirthdates(): Promise<Map<string, string>> {
  * rows don't get updated, causing the grade shown next to a player's name
  * to silently stop matching reality.
  *
- * Also reports which players couldn't be matched to the 部員データベース at
+ * Also returns each matched player's entering year (so a "what grade are
+ * they *right now*" question can be answered directly with gradeAtDate,
+ * rather than by finding their most recent test record - which reads as
+ * their grade at whatever the last time they happened to be tested, and
+ * understates their grade for anyone who missed the most recent round),
+ * and reports which players couldn't be matched to the 部員データベース at
  * all (typo, different name formatting, not yet added to the roster) - for
  * them this silently falls back to the old per-row 学年 behaviour, which is
  * easy to mistake for the new logic "not working" unless it's surfaced. */
-/** A graduated/inactive player simply not being in the roster database is
- * expected and not worth flagging - only an unmatched player who was
- * tested recently (and so is presumably still active) points at a real
- * mismatch worth fixing. "Recent" is relative to the newest test date in
- * the dataset, not the server clock, so this keeps working correctly
- * during an off-season gap in testing. */
-const UNMATCHED_RECENCY_WINDOW_DAYS = 400;
-
-function daysBetween(a: string, b: string): number {
-  return Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 86_400_000;
-}
-
-async function applyComputedGrades(
-  records: BloodTestRecord[]
-): Promise<{ records: BloodTestRecord[]; unmatchedPlayers: string[] }> {
+async function applyComputedGrades(records: BloodTestRecord[]): Promise<{
+  records: BloodTestRecord[];
+  enteringYearByPlayer: Record<string, number>;
+  unmatchedPlayers: string[];
+}> {
   const birthdates = await fetchMemberBirthdates();
-  const enteringYearByPlayer = new Map<string, number>();
+  const enteringYearByKey = new Map<string, number>();
+  const enteringYearByPlayer: Record<string, number> = {};
   const latestUnmatchedDate = new Map<string, string>();
   const graded = records.map((r) => {
     const key = normalizeNameForMatching(r.player);
@@ -236,14 +232,24 @@ async function applyComputedGrades(
       if (!prev || r.date > prev) latestUnmatchedDate.set(r.player, r.date);
       return r;
     }
-    let enteringYear = enteringYearByPlayer.get(key);
+    let enteringYear = enteringYearByKey.get(key);
     if (enteringYear === undefined) {
       enteringYear = enteringYearFromBirthdate(birthdate);
-      enteringYearByPlayer.set(key, enteringYear);
+      enteringYearByKey.set(key, enteringYear);
     }
+    enteringYearByPlayer[r.player] = enteringYear;
     return { ...r, grade: gradeAtDate(enteringYear, r.date) };
   });
 
+  // A graduated/inactive player simply not being in the roster database is
+  // expected and not worth flagging - only an unmatched player who was
+  // tested recently (and so is presumably still active) points at a real
+  // mismatch worth fixing. "Recent" is relative to the newest test date in
+  // the dataset, not the server clock, so this keeps working correctly
+  // during an off-season gap in testing.
+  const UNMATCHED_RECENCY_WINDOW_DAYS = 400;
+  const daysBetween = (a: string, b: string) =>
+    Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 86_400_000;
   const newestOverallDate = records.reduce((max, r) => (r.date > max ? r.date : max), "");
   const unmatchedPlayers = uniqueSorted(
     Array.from(latestUnmatchedDate.entries())
@@ -253,7 +259,7 @@ async function applyComputedGrades(
       .map(([player]) => player)
   );
 
-  return { records: graded, unmatchedPlayers };
+  return { records: graded, enteringYearByPlayer, unmatchedPlayers };
 }
 
 /** Fetching every row from Notion (paginated, several round trips) gets
@@ -274,12 +280,14 @@ export const fetchBloodData = unstable_cache(
       .filter((r) => r.date && r.player)
       .sort((a, b) => a.date.localeCompare(b.date));
     let unmatchedGradePlayers: string[] | undefined;
+    let playerEnteringYear: Record<string, number> | undefined;
     if (isMembersNotionConfigured()) {
       const result = await applyComputedGrades(records);
       records = result.records;
       unmatchedGradePlayers = result.unmatchedPlayers;
+      playerEnteringYear = result.enteringYearByPlayer;
     }
-    return buildBloodResponse(records, "notion", unmatchedGradePlayers);
+    return buildBloodResponse(records, "notion", unmatchedGradePlayers, playerEnteringYear);
   },
   ["blood-data"],
   { revalidate: 60 }
@@ -288,7 +296,8 @@ export const fetchBloodData = unstable_cache(
 function buildBloodResponse(
   records: BloodTestRecord[],
   source: BloodDataResponse["source"],
-  unmatchedGradePlayers?: string[]
+  unmatchedGradePlayers?: string[],
+  playerEnteringYear?: Record<string, number>
 ): BloodDataResponse {
   const parameters = new Set<string>();
   records.forEach((r) => Object.keys(r.values).forEach((k) => parameters.add(k)));
@@ -298,6 +307,7 @@ function buildBloodResponse(
     parameters: uniqueSorted(parameters),
     source,
     unmatchedGradePlayers,
+    playerEnteringYear,
   };
 }
 
