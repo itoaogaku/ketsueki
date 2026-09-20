@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { TrendLineChart } from "./TrendLineChart";
 import { DataTable } from "./DataTable";
 import { buildDateNormalization, computeGroupComparisonByDate, type ComparisonGroup } from "@/lib/stats";
+import { orderParametersByCategory } from "@/lib/parameter-categories";
 import type { BloodTestRecord } from "@/lib/types";
 
 const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
@@ -29,6 +30,13 @@ export function GroupComparisonSection({
   const [checked, setChecked] = useState<string[]>(parameters[0] ? [parameters[0]] : []);
   const [showTable, setShowTable] = useState(false);
   const [showDateLog, setShowDateLog] = useState(false);
+
+  // Same category order the wide tables use (貧血関連項目 → 疲労感関連項目 →
+  // ...), rather than whatever order the parameters happened to arrive in.
+  const orderedParameters = useMemo(
+    () => orderParametersByCategory(parameters).flatMap((g) => g.params),
+    [parameters]
+  );
 
   const toggle = (p: string) => {
     setChecked((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
@@ -107,15 +115,15 @@ export function GroupComparisonSection({
       </div>
 
       <div
-        className="flex max-h-32 flex-wrap gap-1 overflow-y-auto rounded-md p-2"
+        className="flex flex-wrap gap-1 rounded-md p-2"
         style={{ border: "1px solid var(--border)" }}
       >
-        {parameters.map((p) => {
+        {orderedParameters.map((p) => {
           const active = checked.includes(p);
           return (
             <label
               key={p}
-              className="flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs"
+              className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[11px] whitespace-nowrap"
               style={{
                 background: active ? "var(--brand)" : "transparent",
                 color: active ? "#ffffff" : "var(--text-secondary)",
