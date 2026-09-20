@@ -113,17 +113,16 @@ function dedupeKey(row: { player: string; date: string; event: string }): string
   return `${row.player}__${row.date}__${row.event}`;
 }
 
-/** One 競技結果DB row already converted to WA得点, along with whichever
- * WAスコアDB page (if any) it should overwrite - resolved once during
- * `prepareWaScoreSync` so `writeWaScoreBatch` never has to re-read either
- * database to figure this out. */
+/** One 競技結果DB row already converted to WA得点. Whether a matching row
+ * already exists in the WAスコア database is deliberately NOT resolved here
+ * (see prepareWaScoreSync's doc comment) - writeWaScoreBatch figures that
+ * out per batch instead. */
 export interface PreparedWaRow {
   player: string;
   date: string;
   event: string;
   resultText: string;
   points: number;
-  existingPageId: string | null;
 }
 
 export interface PrepareWaSyncResult {
@@ -140,20 +139,19 @@ export interface PrepareWaSyncResult {
 }
 
 /**
- * Reads every row of the 競技結果データベース, converts each recognized
+ * Reads every row of the 競技結果データベース and converts each recognized
  * standard-distance result into WA (World Athletics) Scoring Tables points
- * (see lib/wa-scoring.ts), and checks each one against the WAスコア
- * database's existing rows - a read-only pass (no writes), so it's used both
- * for a "内容を確認" dry run and as the first step of an actual sync, whose
+ * (see lib/wa-scoring.ts) - a read-only pass over the *source* database only
+ * (no writes, and no reading of the WAスコア database), used both for a
+ * "内容を確認" dry-run preview and as the first step of an actual sync, whose
  * caller (writeWaScoreBatch) needs the same `rows` list to write from.
  *
- * Doing this once and having the caller batch `rows` itself (rather than
- * re-deriving it inside every batched write call, the way
- * lib/import-blood-csv.ts's CSV importer re-scans its whole file every
- * round) matters here because the source 競技結果DB is read in full every
- * time - for a large database that's dozens of Notion API round trips, which
- * repeated on every one of many small write batches added up to blowing
- * past a serverless function's time limit even with few writes per batch.
+ * This deliberately does NOT check which rows already exist in the WAスコア
+ * database - it used to (via one queryAllPages of that database), but that
+ * database only grows across repeated syncs, and once it held a few thousand
+ * rows that read alone was slow enough to make even this read-only step
+ * time out. writeWaScoreBatch checks existence itself, scoped to just the
+ * rows in the batch it's about to write, instead.
  */
 export async function prepareWaScoreSync(): Promise<PrepareWaSyncResult> {
   if (!isGamesNotionConfigured()) {
@@ -166,7 +164,6 @@ export async function prepareWaScoreSync(): Promise<PrepareWaSyncResult> {
       "NOTION_WA_SCORES_DATABASE_ID が設定されていません（先に npm run setup:notion -- --with-wa-scores を実行するか、既存DBのIDを設定してください）"
     );
   }
-  const waScoresDbId = process.env.NOTION_WA_SCORES_DATABASE_ID!;
 
   const sourcePages = await queryAllPages(process.env.NOTION_GAMES_DATABASE_ID!);
   const extractedRows = sourcePages.map(extractRawResultRow).filter((r): r is RawResultRow => r !== null);
@@ -175,7 +172,7 @@ export async function prepareWaScoreSync(): Promise<PrepareWaSyncResult> {
   let outOfScope = 0;
   let unparseable = 0;
   const warnings: string[] = [];
-  const converted: { player: string; date: string; event: string; resultText: string; points: number }[] = [];
+  const rows: PreparedWaRow[] = [];
 
   for (const row of rawRows) {
     if (!resolveWaDiscipline(row.event)) {
@@ -190,28 +187,8 @@ export async function prepareWaScoreSync(): Promise<PrepareWaSyncResult> {
       );
       continue;
     }
-    converted.push({ ...row, points: computed.points });
+    rows.push({ ...row, points: computed.points });
   }
-
-  const existingKeys = new Map<string, string>();
-  if (converted.length > 0) {
-    const existingPages = await queryAllPages(waScoresDbId);
-    for (const page of existingPages) {
-      const player = getPlainTitle(page);
-      let date = "";
-      let event = "";
-      for (const [name, prop] of Object.entries(page.properties)) {
-        if (prop.type === "date" && prop.date?.start) date = prop.date.start.slice(0, 10);
-        else if (prop.type === "select" && /種目/.test(name)) event = prop.select?.name ?? "";
-      }
-      if (player && date && event) existingKeys.set(dedupeKey({ player, date, event }), page.id);
-    }
-  }
-
-  const rows: PreparedWaRow[] = converted.map((row) => ({
-    ...row,
-    existingPageId: existingKeys.get(dedupeKey(row)) ?? null,
-  }));
 
   return {
     totalSourceRows: sourcePages.length,
@@ -224,10 +201,13 @@ export async function prepareWaScoreSync(): Promise<PrepareWaSyncResult> {
 }
 
 /**
- * Writes one batch of already-`prepareWaScoreSync`-resolved rows to the
- * WAスコア database (create if `existingPageId` is null, otherwise update
- * that page) - no re-reading of either database, so the caller controls
- * batch size purely by how many `rows` it passes, to stay under a
+ * Writes one batch of already-`prepareWaScoreSync`-converted rows to the
+ * WAスコア database - create if no matching row (same 選手名 + 日付 + 競技種目)
+ * exists yet there, otherwise update it. Existence is checked with a single
+ * filtered query scoped to just this batch's rows (an OR of up to
+ * `rows.length` exact-match conditions), not by reading the whole WAスコア
+ * database - see prepareWaScoreSync's doc comment for why. The caller
+ * controls batch size purely by how many `rows` it passes, to stay under a
  * serverless function's time limit (see app/api/sync-wa-scores/route.ts and
  * the /import page for how the browser slices `PrepareWaSyncResult.rows`
  * into batches across repeated calls).
@@ -247,7 +227,35 @@ export async function writeWaScoreBatch(
   const notion = getNotionClient();
   const dataSourceId = await resolveDataSourceId(waScoresDbId);
 
+  const existingKeys = new Map<string, string>();
+  const filterResponse = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    page_size: 100,
+    filter: {
+      or: rows.map((row) => ({
+        and: [
+          { property: "選手名", title: { equals: row.player } },
+          { property: "日付", date: { equals: row.date } },
+          { property: "競技種目", select: { equals: row.event } },
+        ],
+      })),
+    } as Parameters<typeof notion.dataSources.query>[0]["filter"],
+  });
+  for (const result of filterResponse.results) {
+    if (result.object !== "page" || !("properties" in result)) continue;
+    const page = result as PageObjectResponse;
+    const player = getPlainTitle(page);
+    let date = "";
+    let event = "";
+    for (const [name, prop] of Object.entries(page.properties)) {
+      if (prop.type === "date" && prop.date?.start) date = prop.date.start.slice(0, 10);
+      else if (prop.type === "select" && /種目/.test(name)) event = prop.select?.name ?? "";
+    }
+    if (player && date && event) existingKeys.set(dedupeKey({ player, date, event }), page.id);
+  }
+
   for (const row of rows) {
+    const existingPageId = existingKeys.get(dedupeKey(row));
     const properties = {
       選手名: { title: [{ text: { content: row.player } }] },
       日付: { date: { start: row.date } },
@@ -256,9 +264,9 @@ export async function writeWaScoreBatch(
       WA得点: { number: row.points },
     };
 
-    if (row.existingPageId) {
+    if (existingPageId) {
       await notion.pages.update({
-        page_id: row.existingPageId,
+        page_id: existingPageId,
         properties: properties as Parameters<typeof notion.pages.update>[0]["properties"],
       });
       updated++;

@@ -29,6 +29,12 @@ import { prepareWaScoreSync, writeWaScoreBatch } from "../lib/sync-wa-scores";
 
 const dryRun = process.argv.includes("--dry-run");
 
+// writeWaScoreBatch checks for already-existing rows with one filtered
+// Notion query scoped to the batch it's given (see lib/sync-wa-scores.ts) -
+// keeping batches this size keeps that filter (one OR-condition per row) a
+// reasonable size.
+const BATCH_SIZE = 25;
+
 async function main() {
   console.log("競技結果データベースを読み込み、WAスコアを計算しています...");
   const prepared = await prepareWaScoreSync();
@@ -43,15 +49,21 @@ async function main() {
   );
 
   if (dryRun) {
-    const created = prepared.rows.filter((r) => !r.existingPageId).length;
-    const updated = toWriteCount - created;
     console.log(`\n--- 確認結果（未実行） ---`);
-    console.log(`作成予定: ${created}件`);
-    console.log(`更新予定: ${updated}件`);
+    console.log(`変換対象: ${toWriteCount}件（作成/更新の内訳は実行時に判明します）`);
     return;
   }
 
-  const { created, updated } = await writeWaScoreBatch(prepared.rows);
+  let created = 0;
+  let updated = 0;
+  for (let i = 0; i < prepared.rows.length; i += BATCH_SIZE) {
+    const batch = prepared.rows.slice(i, i + BATCH_SIZE);
+    const round = await writeWaScoreBatch(batch);
+    created += round.created;
+    updated += round.updated;
+    console.log(`  進捗: ${created + updated}/${toWriteCount}件`);
+  }
+
   console.log(`\n--- 完了 ---`);
   console.log(`作成: ${created}件`);
   console.log(`更新: ${updated}件`);

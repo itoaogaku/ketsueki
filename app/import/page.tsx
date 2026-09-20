@@ -98,9 +98,13 @@ export default function ImportPage() {
       };
 
       if (waDryRun) {
-        const created = prepared.rows.filter((r) => !r.existingPageId).length;
-        const updated = prepared.rows.length - created;
-        setWaSummary({ ...base, created, updated });
+        // Whether each row is a create or an update is no longer resolved
+        // here (see lib/sync-wa-scores.ts's prepareWaScoreSync doc comment -
+        // reading the whole, ever-growing WAスコア database up front to
+        // answer that got too slow), so a dry run can only preview the
+        // target count, not split it - the real created/updated counts show
+        // up progressively once an actual sync starts writing.
+        setWaSummary({ ...base, created: 0, updated: 0 });
         return;
       }
 
@@ -388,11 +392,15 @@ export default function ImportPage() {
               {waSummary.totalSourceRows}件中 {waSummary.parsedRows}件から選手名・日付・種目・結果を取得しました
             </p>
             <ul className="space-y-0.5">
-              {!waSummary.dryRun && (
-                <li>進捗: {waSummary.created + waSummary.updated} / {waSummary.targetTotal}件</li>
+              {waSummary.dryRun ? (
+                <li>変換対象: {waSummary.targetTotal}件（作成/更新の内訳は実行時に判明します）</li>
+              ) : (
+                <>
+                  <li>進捗: {waSummary.created + waSummary.updated} / {waSummary.targetTotal}件</li>
+                  <li>作成: {waSummary.created}件</li>
+                  <li>更新: {waSummary.updated}件</li>
+                </>
               )}
-              <li>{waSummary.dryRun ? "作成予定" : "作成"}: {waSummary.created}件</li>
-              <li>{waSummary.dryRun ? "更新予定" : "更新"}: {waSummary.updated}件</li>
               <li style={{ color: "var(--text-secondary)" }}>
                 対象外（非標準種目）: {waSummary.outOfScope}件 / 記録形式不明: {waSummary.unparseable}件
               </li>
