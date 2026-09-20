@@ -62,3 +62,23 @@ body {
 input[type="checkbox"] {
   accent-color: var(--brand);
 }
+
+/* The wide selector tables (学年別一覧 etc.) are deliberately enlarged
+ * beyond their container on desktop (130% width) to make better use of
+ * the extra screen space - but on a phone there's no extra space to give,
+ * so that same trick would only make an already-narrow viewport force
+ * extra horizontal scrolling. Below the breakpoint the table just fills
+ * the viewport at its natural size instead. */
+.wide-table-container {
+  width: 100%;
+  margin-left: 0;
+  max-height: 70vh;
+}
+
+@media (min-width: 768px) {
+  .wide-table-container {
+    width: 130%;
+    margin-left: -15%;
+    max-height: calc(91vh - 1.5cm);
+  }
+}

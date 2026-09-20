@@ -43,16 +43,13 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
 
   return (
     <div
-      className="overflow-auto rounded-lg"
+      className="wide-table-container overflow-auto rounded-lg"
       style={{
         border: "1px solid var(--border)",
-        maxHeight: "calc(91vh - 1.5cm)",
-        width: "130%",
-        marginLeft: "-15%",
-        // Gray, not white: the container is wider than the table itself (to
-        // give the enlarged view room), and that leftover strip past the
-        // table's own right edge should read as "no more data" rather than
-        // looking like part of the table.
+        // Gray, not white: on desktop the container is wider than the table
+        // itself (to give the enlarged view room), and that leftover strip
+        // past the table's own right edge should read as "no more data"
+        // rather than looking like part of the table.
         background: "var(--surface-empty)",
       }}
     >
