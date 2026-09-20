@@ -2,6 +2,14 @@
 
 import { useEffect } from "react";
 import { PARAMETER_INFO } from "@/lib/parameter-info";
+import { REFERENCE_RANGES } from "@/lib/reference-ranges";
+
+function formatRange(low?: number, high?: number): string | null {
+  if (low !== undefined && high !== undefined) return `${low}〜${high}`;
+  if (high !== undefined) return `${high}以下`;
+  if (low !== undefined) return `${low}以上`;
+  return null;
+}
 
 /** Popup explaining what a blood-test parameter measures and why a
  * distance runner should care about it, opened by tapping the parameter
@@ -23,6 +31,8 @@ export function ParameterInfoModal({
   }, [onClose]);
 
   const info = PARAMETER_INFO[parameter];
+  const range = REFERENCE_RANGES[parameter];
+  const rangeText = range ? formatRange(range.low, range.high) : null;
 
   return (
     <div
@@ -62,12 +72,45 @@ export function ParameterInfoModal({
           </p>
         ) : (
           <div className="mt-3 space-y-4 text-sm" style={{ color: "var(--text-primary)" }}>
+            {rangeText && (
+              <section className="space-y-1">
+                <h4 className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  基準値
+                </h4>
+                <p className="leading-relaxed" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {rangeText}
+                </p>
+              </section>
+            )}
             <section className="space-y-1">
               <h4 className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 何を測っているか
               </h4>
               <p className="leading-relaxed">{info.whatItMeasures}</p>
             </section>
+            {(info.highSymptoms || info.lowSymptoms) && (
+              <section className="space-y-2">
+                <h4 className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  基準値から外れたときの症状
+                </h4>
+                {info.highSymptoms && (
+                  <p className="leading-relaxed">
+                    <span className="font-medium" style={{ color: "var(--status-critical)" }}>
+                      高値：
+                    </span>
+                    {info.highSymptoms}
+                  </p>
+                )}
+                {info.lowSymptoms && (
+                  <p className="leading-relaxed">
+                    <span className="font-medium" style={{ color: "var(--series-1)" }}>
+                      低値：
+                    </span>
+                    {info.lowSymptoms}
+                  </p>
+                )}
+              </section>
+            )}
             <section className="space-y-1">
               <h4 className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 長距離ランナーにとっての意味
