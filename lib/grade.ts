@@ -1,21 +1,14 @@
 import { academicYear } from "./stats";
 import type { Grade } from "./types";
 
-const STANDARD_YEARS_TO_ENTER_UNIVERSITY = 18;
-
-/**
- * The Japanese school-year cohort a birthdate belongs to: children born
- * April 2 of year Y through April 1 of year Y+1 start school together, and
- * are counted as belonging to "year Y" (the school year that starts in
- * April of year Y).
- */
-function schoolCohortYear(birthdate: string): number {
-  const year = Number(birthdate.slice(0, 4));
-  const month = Number(birthdate.slice(5, 7));
-  const day = Number(birthdate.slice(8, 10));
-  const bornOnOrAfterApril2 = month > 4 || (month === 4 && day >= 2);
-  return bornOnOrAfterApril2 ? year : year - 1;
-}
+// 4/1〜翌年3/31生まれが同学年（年度区切り）として扱う。
+//
+// 標準的な進学（6歳で小学校入学、留年・浪人なしで大学まで進む）では、
+// 生まれた年度の19年後の4月に大学へ入学する（小学校6年+中学3年+高校3
+// 年=12年後に小学校入学年度、さらにそこから6歳になる年度である+6を
+// 加えると19）。例えば2004年度生まれ（2004/4/1〜2005/3/31）は2023年
+// 4月に大学入学。
+const YEARS_FROM_BIRTH_FISCAL_YEAR_TO_UNIVERSITY_ENTRY = 19;
 
 /**
  * The academic year (April-start) a player with this birthdate would enter
@@ -26,7 +19,7 @@ function schoolCohortYear(birthdate: string): number {
  * advance a year and old rows don't get updated.
  */
 export function enteringYearFromBirthdate(birthdate: string): number {
-  return schoolCohortYear(birthdate) + STANDARD_YEARS_TO_ENTER_UNIVERSITY;
+  return academicYear(birthdate) + YEARS_FROM_BIRTH_FISCAL_YEAR_TO_UNIVERSITY_ENTRY;
 }
 
 /**
