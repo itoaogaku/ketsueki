@@ -204,14 +204,38 @@ async function fetchMemberBirthdates(): Promise<Map<string, string>> {
  * rather than trusting the 学年 hand-entered on that individual blood-test
  * row - which drifts out of date as a player advances a year and older
  * rows don't get updated, causing the grade shown next to a player's name
- * to silently stop matching reality. */
-async function applyComputedGrades(records: BloodTestRecord[]): Promise<BloodTestRecord[]> {
+ * to silently stop matching reality.
+ *
+ * Also reports which players couldn't be matched to the 部員データベース at
+ * all (typo, different name formatting, not yet added to the roster) - for
+ * them this silently falls back to the old per-row 学年 behaviour, which is
+ * easy to mistake for the new logic "not working" unless it's surfaced. */
+/** A graduated/inactive player simply not being in the roster database is
+ * expected and not worth flagging - only an unmatched player who was
+ * tested recently (and so is presumably still active) points at a real
+ * mismatch worth fixing. "Recent" is relative to the newest test date in
+ * the dataset, not the server clock, so this keeps working correctly
+ * during an off-season gap in testing. */
+const UNMATCHED_RECENCY_WINDOW_DAYS = 400;
+
+function daysBetween(a: string, b: string): number {
+  return Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 86_400_000;
+}
+
+async function applyComputedGrades(
+  records: BloodTestRecord[]
+): Promise<{ records: BloodTestRecord[]; unmatchedPlayers: string[] }> {
   const birthdates = await fetchMemberBirthdates();
   const enteringYearByPlayer = new Map<string, number>();
-  return records.map((r) => {
+  const latestUnmatchedDate = new Map<string, string>();
+  const graded = records.map((r) => {
     const key = normalizeNameForMatching(r.player);
     const birthdate = birthdates.get(key);
-    if (!birthdate) return r;
+    if (!birthdate) {
+      const prev = latestUnmatchedDate.get(r.player);
+      if (!prev || r.date > prev) latestUnmatchedDate.set(r.player, r.date);
+      return r;
+    }
     let enteringYear = enteringYearByPlayer.get(key);
     if (enteringYear === undefined) {
       enteringYear = enteringYearFromBirthdate(birthdate);
@@ -219,6 +243,17 @@ async function applyComputedGrades(records: BloodTestRecord[]): Promise<BloodTes
     }
     return { ...r, grade: gradeAtDate(enteringYear, r.date) };
   });
+
+  const newestOverallDate = records.reduce((max, r) => (r.date > max ? r.date : max), "");
+  const unmatchedPlayers = uniqueSorted(
+    Array.from(latestUnmatchedDate.entries())
+      .filter(
+        ([, date]) => daysBetween(date, newestOverallDate) <= UNMATCHED_RECENCY_WINDOW_DAYS
+      )
+      .map(([player]) => player)
+  );
+
+  return { records: graded, unmatchedPlayers };
 }
 
 /** Fetching every row from Notion (paginated, several round trips) gets
@@ -238,10 +273,13 @@ export const fetchBloodData = unstable_cache(
       .map(extractBloodRecord)
       .filter((r) => r.date && r.player)
       .sort((a, b) => a.date.localeCompare(b.date));
+    let unmatchedGradePlayers: string[] | undefined;
     if (isMembersNotionConfigured()) {
-      records = await applyComputedGrades(records);
+      const result = await applyComputedGrades(records);
+      records = result.records;
+      unmatchedGradePlayers = result.unmatchedPlayers;
     }
-    return buildBloodResponse(records, "notion");
+    return buildBloodResponse(records, "notion", unmatchedGradePlayers);
   },
   ["blood-data"],
   { revalidate: 60 }
@@ -249,7 +287,8 @@ export const fetchBloodData = unstable_cache(
 
 function buildBloodResponse(
   records: BloodTestRecord[],
-  source: BloodDataResponse["source"]
+  source: BloodDataResponse["source"],
+  unmatchedGradePlayers?: string[]
 ): BloodDataResponse {
   const parameters = new Set<string>();
   records.forEach((r) => Object.keys(r.values).forEach((k) => parameters.add(k)));
@@ -258,6 +297,7 @@ function buildBloodResponse(
     players: uniqueSorted(records.map((r) => r.player)),
     parameters: uniqueSorted(parameters),
     source,
+    unmatchedGradePlayers,
   };
 }
 

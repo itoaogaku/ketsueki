@@ -33,6 +33,13 @@ export interface BloodDataResponse {
   players: string[];
   parameters: string[];
   source: "notion" | "sample";
+  /** Players with blood-test records whose name didn't match anyone in the
+   * 部員データベース (only populated when that database is configured) -
+   * their grade falls back to whatever is hand-entered on their own
+   * blood-test rows, which can be stale. Surfaced so a name mismatch (typo,
+   * missing roster entry) can be spotted and fixed at the source instead of
+   * silently producing a wrong grade. */
+  unmatchedGradePlayers?: string[];
 }
 
 export interface GameResultsResponse {

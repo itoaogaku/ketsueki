@@ -160,6 +160,9 @@ export function Dashboard({
           </Link>
         </div>
         <SourceBadge blood={bloodData.source} games={gameData.source} />
+        {bloodData.unmatchedGradePlayers && bloodData.unmatchedGradePlayers.length > 0 && (
+          <UnmatchedGradeWarning players={bloodData.unmatchedGradePlayers} />
+        )}
       </header>
 
       {/* Grade view: reproduces the original spreadsheet's per-grade wide table */}
@@ -486,5 +489,27 @@ function SourceBadge({
         ? "サンプルデータ表示中（Notion未接続）"
         : "Notionのデータに接続中"}
     </span>
+  );
+}
+
+/** Points at recently-tested players whose name in the血液検査DB doesn't
+ * match anyone in the 部員データベース - their 学年 is silently falling
+ * back to the (possibly stale) value hand-entered on their own blood-test
+ * rows instead of being computed from a birthdate, which reads exactly
+ * like the auto-calculation "not working" unless it's called out. */
+function UnmatchedGradeWarning({ players }: { players: string[] }) {
+  return (
+    <div
+      className="w-fit max-w-full rounded-lg px-3 py-2 text-xs"
+      style={{ background: "rgba(250, 178, 25, 0.15)", color: "#9a6b00" }}
+    >
+      <p className="font-medium">
+        部員データベースと名前が一致しない選手がいます（学年は血液検査データベース側の値を使用中）
+      </p>
+      <p className="mt-0.5">{players.join("、")}</p>
+      <p className="mt-0.5" style={{ color: "var(--text-muted)" }}>
+        部員データベースの「氏名」がこれらの選手名と完全に一致しているか（表記ゆれ・スペースの違いなど）ご確認ください。
+      </p>
+    </div>
   );
 }
