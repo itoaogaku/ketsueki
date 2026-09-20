@@ -1,4 +1,5 @@
-import type { BloodTestRecord, Dorm, GameResultRecord, Grade } from "./types";
+import type { BloodTestRecord, Dorm, GameResultRecord, Grade, WaScoreRecord } from "./types";
+import { computeWaPoints } from "./wa-scoring";
 
 const GRADES: Grade[] = ["1年", "2年", "3年", "4年"];
 
@@ -127,6 +128,53 @@ export function generateSampleGameResults(): GameResultRecord[] {
   }
   cachedGameResults = records;
   return records;
+}
+
+let cachedWaScores: WaScoreRecord[] | null = null;
+
+const WA_SAMPLE_EVENTS: { event: string; baseSeconds: number }[] = [
+  { event: "5000m", baseSeconds: 14 * 60 },
+  { event: "10000m", baseSeconds: 29 * 60 },
+  { event: "ハーフマラソン", baseSeconds: 63 * 60 },
+];
+
+export function generateSampleWaScores(): WaScoreRecord[] {
+  if (cachedWaScores) return cachedWaScores;
+
+  // computeWaPoints touches its own module-level calculator instance, not
+  // this file's PRNG, so no seeding concern here beyond gaussian() itself.
+  const gaussian = makeGaussian(20260303);
+  const players = buildPlayers(gaussian);
+  const records: WaScoreRecord[] = [];
+  let id = 1;
+  for (const p of players) {
+    MONTHS.forEach((month, mIdx) => {
+      // Same mild within-season fitness drift as the blood-test sample data,
+      // translated into a few seconds faster/slower per race.
+      const fitness = Math.sin(mIdx / 1.5) * 5;
+      const pick = WA_SAMPLE_EVENTS[(SURNAMES.indexOf(p.name.replace("選手", "")) + mIdx) % WA_SAMPLE_EVENTS.length];
+      const seconds = Math.max(1, gaussian(pick.baseSeconds - fitness, 8));
+      const resultText = formatRaceTime(seconds);
+      const computed = computeWaPoints(pick.event, resultText);
+      if (!computed) return; // shouldn't happen for these known-good events
+      records.push({
+        id: `sample-wa-${id++}`,
+        player: p.name,
+        date: `${month}-20`,
+        event: pick.event,
+        resultText,
+        points: computed.points,
+      });
+    });
+  }
+  cachedWaScores = records;
+  return records;
+}
+
+function formatRaceTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toFixed(2).padStart(5, "0")}`;
 }
 
 function round(n: number, digits: number) {

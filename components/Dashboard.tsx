@@ -7,14 +7,16 @@ import { PlayerHistoryTable } from "./PlayerHistoryTable";
 import { PlayerTrendChart } from "./PlayerTrendChart";
 import { DateLookupTable } from "./DateLookupTable";
 import { DORM_COMPARISON_GROUPS, GRADE_COMPARISON_GROUPS } from "@/lib/stats";
-import type { BloodDataResponse, GameResultsResponse } from "@/lib/types";
+import type { BloodDataResponse, GameResultsResponse, WaScoreResponse } from "@/lib/types";
 
 export function Dashboard({
   bloodData,
   gameData,
+  waData,
 }: {
   bloodData: BloodDataResponse;
   gameData: GameResultsResponse;
+  waData: WaScoreResponse;
 }) {
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 px-4 py-8">
@@ -36,7 +38,7 @@ export function Dashboard({
             CSVインポート
           </Link>
         </div>
-        <SourceBadge blood={bloodData.source} games={gameData.source} />
+        <SourceBadge blood={bloodData.source} games={gameData.source} wa={waData.source} />
         {bloodData.unmatchedGradePlayers && bloodData.unmatchedGradePlayers.length > 0 && (
           <UnmatchedGradeWarning players={bloodData.unmatchedGradePlayers} />
         )}
@@ -54,7 +56,7 @@ export function Dashboard({
 
       <DateLookupTable bloodData={bloodData} />
 
-      <PlayerTrendChart bloodData={bloodData} />
+      <PlayerTrendChart bloodData={bloodData} waData={waData} />
 
       {/* 1寮生 vs 2寮生, by exact test date */}
       <GroupComparisonSection
@@ -78,11 +80,13 @@ export function Dashboard({
 function SourceBadge({
   blood,
   games,
+  wa,
 }: {
   blood: "notion" | "sample";
   games: "notion" | "sample";
+  wa: "notion" | "sample";
 }) {
-  const isSample = blood === "sample" || games === "sample";
+  const isSample = blood === "sample" || games === "sample" || wa === "sample";
   return (
     <span
       className="inline-flex w-fit items-center gap-1 rounded-full px-2 py-1 text-xs"

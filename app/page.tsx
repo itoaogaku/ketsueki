@@ -1,5 +1,5 @@
 import { Dashboard } from "@/components/Dashboard";
-import { fetchBloodData, fetchGameResults } from "@/lib/notion";
+import { fetchBloodData, fetchGameResults, fetchWaScores } from "@/lib/notion";
 
 // Statically rendered and revalidated in the background every minute (ISR),
 // rather than re-run for every visitor: with the previous `force-dynamic`
@@ -18,6 +18,10 @@ import { fetchBloodData, fetchGameResults } from "@/lib/notion";
 export const revalidate = 60;
 
 export default async function Home() {
-  const [bloodData, gameData] = await Promise.all([fetchBloodData(), fetchGameResults()]);
-  return <Dashboard bloodData={bloodData} gameData={gameData} />;
+  const [bloodData, gameData, waData] = await Promise.all([
+    fetchBloodData(),
+    fetchGameResults(),
+    fetchWaScores(),
+  ]);
+  return <Dashboard bloodData={bloodData} gameData={gameData} waData={waData} />;
 }

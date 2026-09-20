@@ -86,3 +86,16 @@ export function compareByGradeThenRosterName(
   if (ag !== bg) return ag - bg;
   return compareByRosterName(a.player, b.player);
 }
+
+/** The same player's name can carry a full-width space (「村上　直弥」) in one
+ * Notion database and a half-width space (「村上 直弥」) in another, since
+ * they were filled in by hand at different times - collapsing every run of
+ * whitespace (either kind) to a single half-width space before matching
+ * means that difference doesn't break a cross-database lookup. Used both
+ * server-side (matching the 部員データベース's birthdates, lib/notion.ts) and
+ * client-side (matching a player's WA得点 records to their blood-test name,
+ * PlayerTrendChart.tsx), so it lives here rather than in lib/notion.ts,
+ * which pulls in server-only dependencies a client component can't bundle. */
+export function normalizeNameForMatching(name: string): string {
+  return name.replace(/[　\s]+/g, " ").trim();
+}

@@ -3,17 +3,21 @@
 import { useMemo, useState } from "react";
 import { gradeAtDate } from "@/lib/grade";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
-import { compareByGradeThenRosterName } from "@/lib/player-roster";
+import { compareByGradeThenRosterName, normalizeNameForMatching } from "@/lib/player-roster";
 import { REFERENCE_RANGES } from "@/lib/reference-ranges";
 import { enteringAcademicYear } from "@/lib/stats";
 import { GRADE_OPTIONS } from "@/lib/types";
-import type { BloodDataResponse, Grade } from "@/lib/types";
+import type { BloodDataResponse, Grade, WaScoreResponse } from "@/lib/types";
 import { TrendLineChart, type ReferenceLineSpec, type SeriesSpec } from "./TrendLineChart";
 
 const BASE_SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
 
 // 2023年度〜2026年度入学が在校生（卒業済みの先輩は対象外）。
 const CURRENT_STUDENT_ENTERING_YEARS = [2023, 2024, 2025, 2026];
+
+// 検査項目のセレクトに混ぜて選べる、競技成績（WA得点）を表す特別な値。
+// REFERENCE_RANGES には存在しないキーなので、基準値ラインは自動的に出ない。
+const WA_POINTS_KEY = "__wa_points__";
 
 /** A distinct-ish color per selected player - cycles through the app's
  * fixed palette first, then spreads further hues for a bigger comparison
@@ -30,7 +34,13 @@ function colorForIndex(i: number): string {
  * out-of-range cell. A grade button selects everyone in that grade at
  * once for a quick squad-wide comparison; individual players can still be
  * added or removed from there. */
-export function PlayerTrendChart({ bloodData }: { bloodData: BloodDataResponse }) {
+export function PlayerTrendChart({
+  bloodData,
+  waData,
+}: {
+  bloodData: BloodDataResponse;
+  waData: WaScoreResponse;
+}) {
   // 各選手の入学年度。部員データベースで一致した選手はサーバー側で生年月日
   // から計算済みの値を使い、一致しなかった選手は血液検査データベースの
   // 学年+検査日から逆算する（従来どおりのフォールバック）。
@@ -103,6 +113,19 @@ export function PlayerTrendChart({ bloodData }: { bloodData: BloodDataResponse }
     [bloodData.parameters]
   );
 
+  // WAスコアDBは血液検査DBとは別のNotionデータベースなので、全角/半角スペース
+  // など表記ゆれが独立して起こりうる - 部員データベースとの突き合わせと同じ
+  // 正規化（normalizeNameForMatching）で選手名を突き合わせる。
+  const waPointsByPlayerDate = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    for (const r of waData.records) {
+      const key = normalizeNameForMatching(r.player);
+      if (!map.has(key)) map.set(key, new Map());
+      map.get(key)!.set(r.date, r.points);
+    }
+    return map;
+  }, [waData.records]);
+
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>(
     sortedPlayers[0] ? [sortedPlayers[0]] : []
   );
@@ -121,19 +144,32 @@ export function PlayerTrendChart({ bloodData }: { bloodData: BloodDataResponse }
   const data = useMemo(() => {
     if (selectedPlayers.length === 0) return [];
     const byDate = new Map<string, Record<string, unknown>>();
-    for (const player of selectedPlayers) {
-      for (const r of bloodData.records) {
-        if (r.player !== player) continue;
-        const value = r.values[parameter];
-        if (typeof value !== "number") continue;
-        if (!byDate.has(r.date)) byDate.set(r.date, { period: r.date });
-        byDate.get(r.date)![player] = value;
+
+    if (parameter === WA_POINTS_KEY) {
+      for (const player of selectedPlayers) {
+        const byDateForPlayer = waPointsByPlayerDate.get(normalizeNameForMatching(player));
+        if (!byDateForPlayer) continue;
+        for (const [date, points] of byDateForPlayer) {
+          if (!byDate.has(date)) byDate.set(date, { period: date });
+          byDate.get(date)![player] = points;
+        }
+      }
+    } else {
+      for (const player of selectedPlayers) {
+        for (const r of bloodData.records) {
+          if (r.player !== player) continue;
+          const value = r.values[parameter];
+          if (typeof value !== "number") continue;
+          if (!byDate.has(r.date)) byDate.set(r.date, { period: r.date });
+          byDate.get(r.date)![player] = value;
+        }
       }
     }
+
     return Array.from(byDate.values()).sort((a, b) =>
       (a.period as string).localeCompare(b.period as string)
     );
-  }, [bloodData.records, selectedPlayers, parameter]);
+  }, [bloodData.records, waPointsByPlayerDate, selectedPlayers, parameter]);
 
   const series = useMemo<SeriesSpec[]>(
     () => selectedPlayers.map((p, i) => ({ key: p, label: p, color: colorForIndex(i) })),
@@ -160,13 +196,18 @@ export function PlayerTrendChart({ bloodData }: { bloodData: BloodDataResponse }
       </h2>
 
       <div className="flex flex-wrap items-end gap-4">
-        <Field label="検査項目">
+        <Field label="検査項目 / 競技成績">
           <select className="select" value={parameter} onChange={(e) => setParameter(e.target.value)}>
-            {orderedParameters.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
+            <optgroup label="血液検査項目">
+              {orderedParameters.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="競技成績">
+              <option value={WA_POINTS_KEY}>競技成績（WA得点）</option>
+            </optgroup>
           </select>
         </Field>
         <Field label="学年で一括選択">

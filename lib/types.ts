@@ -56,3 +56,22 @@ export interface GameResultsResponse {
   source: "notion" | "sample";
 }
 
+/** One race result converted to WA (World Athletics) Scoring Tables points -
+ * from the WAスコア Notion database that scripts/sync-wa-scores.ts populates
+ * from the 競技結果データベース, not computed live in the app (see
+ * lib/wa-scoring.ts for the conversion itself). */
+export interface WaScoreRecord {
+  id: string;
+  player: string;
+  date: string; // ISO yyyy-mm-dd
+  event: string; // 競技種目, e.g. "5000m"
+  resultText: string; // 競技結果 as originally recorded, e.g. "13:47.76"
+  points: number; // WA得点
+}
+
+export interface WaScoreResponse {
+  records: WaScoreRecord[];
+  players: string[];
+  source: "notion" | "sample";
+}
+

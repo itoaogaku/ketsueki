@@ -14,15 +14,19 @@
  *      Optionally add --with-games to also scaffold a starter 試合結果 DB
  *      (skip this if you already have one - just set its id as
  *      NOTION_GAMES_DATABASE_ID instead).
+ *      Optionally add --with-wa-scores to also scaffold the WAスコア DB that
+ *      scripts/sync-wa-scores.ts populates from 競技結果 (see that script's
+ *      own doc comment for the full WA得点 workflow).
  *
  * The script prints the created database id(s) to add to .env.local as
- * NOTION_BLOOD_DATABASE_ID / NOTION_GAMES_DATABASE_ID.
+ * NOTION_BLOOD_DATABASE_ID / NOTION_GAMES_DATABASE_ID / NOTION_WA_SCORES_DATABASE_ID.
  */
 import { Client } from "@notionhq/client";
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const PARENT_PAGE_ID = process.env.NOTION_PARENT_PAGE_ID;
 const withGames = process.argv.includes("--with-games");
+const withWaScores = process.argv.includes("--with-wa-scores");
 
 async function main() {
   if (!NOTION_TOKEN) {
@@ -115,6 +119,44 @@ async function main() {
       "\n試合結果データベースは作成していません。既存のデータベースの ID を NOTION_GAMES_DATABASE_ID に設定してください。"
     );
     console.log("（新規に作成したい場合は --with-games を付けて再実行してください）");
+  }
+
+  if (withWaScores) {
+    console.log("\nWAスコアデータベースを作成しています...");
+    const waDb = await notion.databases.create({
+      parent: { type: "page_id", page_id: PARENT_PAGE_ID },
+      title: [{ type: "text", text: { content: "WAスコア" } }],
+      is_inline: true,
+      initial_data_source: {
+        properties: {
+          選手名: { type: "title", title: {} },
+          日付: { type: "date", date: {} },
+          競技種目: {
+            type: "select",
+            select: {
+              options: [
+                { name: "3000m", color: "gray" },
+                { name: "5000m", color: "blue" },
+                { name: "10000m", color: "green" },
+                { name: "ハーフマラソン", color: "orange" },
+                { name: "マラソン", color: "red" },
+              ],
+            },
+          },
+          競技結果: { type: "rich_text", rich_text: {} },
+          WA得点: { type: "number", number: { format: "number" } },
+        },
+      },
+    });
+    console.log(`  作成完了: ${waDb.id}`);
+    console.log(`  → .env.local に NOTION_WA_SCORES_DATABASE_ID=${waDb.id} を追加してください`);
+    console.log(
+      "  作成しただけではデータは空です。npm run sync:wa-scores を実行して 競技結果DB から変換・反映してください。"
+    );
+  } else {
+    console.log(
+      "\nWAスコアデータベースは作成していません。（新規に作成したい場合は --with-wa-scores を付けて再実行してください）"
+    );
   }
 }
 

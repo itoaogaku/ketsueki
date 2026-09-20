@@ -2,7 +2,9 @@ import { Client } from "@notionhq/client";
 import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
 import { unstable_cache } from "next/cache";
 import { enteringYearFromBirthdate, gradeAtDate } from "./grade";
-import { generateSampleBloodData, generateSampleGameResults } from "./sample-data";
+import { normalizeNameForMatching } from "./player-roster";
+import { generateSampleBloodData, generateSampleGameResults, generateSampleWaScores } from "./sample-data";
+import { parseRaceTimeSeconds } from "./time";
 import type {
   BloodDataResponse,
   BloodTestRecord,
@@ -10,12 +12,15 @@ import type {
   GameResultRecord,
   GameResultsResponse,
   Grade,
+  WaScoreRecord,
+  WaScoreResponse,
 } from "./types";
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const BLOOD_DB_ID = process.env.NOTION_BLOOD_DATABASE_ID;
 const GAMES_DB_ID = process.env.NOTION_GAMES_DATABASE_ID;
 const MEMBERS_DB_ID = process.env.NOTION_MEMBERS_DATABASE_ID;
+const WA_SCORES_DB_ID = process.env.NOTION_WA_SCORES_DATABASE_ID;
 
 export function isBloodNotionConfigured(): boolean {
   return Boolean(NOTION_TOKEN && BLOOD_DB_ID);
@@ -23,6 +28,10 @@ export function isBloodNotionConfigured(): boolean {
 
 export function isGamesNotionConfigured(): boolean {
   return Boolean(NOTION_TOKEN && GAMES_DB_ID);
+}
+
+export function isWaScoresNotionConfigured(): boolean {
+  return Boolean(NOTION_TOKEN && WA_SCORES_DB_ID);
 }
 
 export function isMembersNotionConfigured(): boolean {
@@ -82,7 +91,7 @@ export async function queryAllPages(databaseId: string): Promise<PageObjectRespo
   return pages;
 }
 
-function getPlainTitle(page: PageObjectResponse): string {
+export function getPlainTitle(page: PageObjectResponse): string {
   for (const prop of Object.values(page.properties)) {
     if (prop.type === "title") {
       return prop.title.map((t) => t.plain_text).join("").trim();
@@ -113,23 +122,6 @@ function extractBloodRecord(page: PageObjectResponse): BloodTestRecord {
   }
 
   return { id: page.id, player, date, dorm, grade, values };
-}
-
-/** Matches a race time written as text, e.g. "13:47.76" or "9:16.68" -
- * minutes:seconds(.hundredths). Times are recorded this way (not as a
- * Number property) in the 競技結果DB, so they land in `labels` like any
- * other text unless parsed into seconds here for numeric use (charts,
- * correlation). Non-time text in the same column (e.g. "途中棄権" for a
- * DNF) simply doesn't match and is left as a label only. */
-const RACE_TIME_PATTERN = /^(\d{1,3}):([0-5]\d)(?:\.(\d+))?$/;
-
-function parseRaceTimeSeconds(text: string): number | null {
-  const m = RACE_TIME_PATTERN.exec(text.trim());
-  if (!m) return null;
-  const minutes = Number(m[1]);
-  const seconds = Number(m[2]);
-  const fraction = m[3] ? Number(`0.${m[3]}`) : 0;
-  return Math.round((minutes * 60 + seconds + fraction) * 100) / 100;
 }
 
 function extractGameRecord(page: PageObjectResponse): GameResultRecord {
@@ -167,15 +159,6 @@ function extractGameRecord(page: PageObjectResponse): GameResultRecord {
 
 function uniqueSorted(values: Iterable<string>): string[] {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ja"));
-}
-
-/** The 部員データベース and 血液検査データベース were filled in by hand at
- * different times, so the same player's name can carry a full-width space
- * (「村上　直弥」) in one and a half-width space (「村上 直弥」) in the other -
- * collapsing every run of whitespace (either kind) to a single half-width
- * space before matching means that difference doesn't break the lookup. */
-function normalizeNameForMatching(name: string): string {
-  return name.replace(/[　\s]+/g, " ").trim();
 }
 
 /** 選手名 -> 生年月日 (ISO yyyy-mm-dd) from the 部員データベース, keyed by
@@ -354,6 +337,62 @@ function buildGameResponse(
     records,
     metrics: uniqueSorted(metrics),
     labels: uniqueSorted(labels),
+    source,
+  };
+}
+
+function extractWaScoreRecord(page: PageObjectResponse): WaScoreRecord | null {
+  const player = getPlainTitle(page);
+  let date = "";
+  let event = "";
+  let resultText = "";
+  let points: number | null = null;
+
+  for (const [name, prop] of Object.entries(page.properties)) {
+    if (prop.type === "date" && prop.date?.start) {
+      date = prop.date.start.slice(0, 10);
+    } else if (prop.type === "select" && /種目/.test(name)) {
+      event = prop.select?.name ?? "";
+    } else if (prop.type === "rich_text" && /結果/.test(name)) {
+      resultText = prop.rich_text.map((t) => t.plain_text).join("");
+    } else if (prop.type === "number" && /得点|points/i.test(name) && typeof prop.number === "number") {
+      points = prop.number;
+    }
+  }
+
+  if (!player || !date || points === null) return null;
+  return { id: page.id, player, date, event, resultText, points };
+}
+
+/** Reads pre-computed WA得点 rows from the WAスコア database that
+ * scripts/sync-wa-scores.ts populates from the 競技結果データベース (see
+ * lib/wa-scoring.ts) - not computed live here, since the source 競技結果 DB's
+ * 種目/結果 column names aren't standardized enough for the app itself to
+ * reliably auto-detect and convert on every request. */
+export const fetchWaScores = unstable_cache(
+  async (): Promise<WaScoreResponse> => {
+    if (!isWaScoresNotionConfigured()) {
+      const records = generateSampleWaScores();
+      return buildWaScoreResponse(records, "sample");
+    }
+    const pages = await queryAllPages(WA_SCORES_DB_ID!);
+    const records = pages
+      .map(extractWaScoreRecord)
+      .filter((r): r is WaScoreRecord => r !== null)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return buildWaScoreResponse(records, "notion");
+  },
+  ["wa-scores"],
+  { revalidate: 60 }
+);
+
+function buildWaScoreResponse(
+  records: WaScoreRecord[],
+  source: WaScoreResponse["source"]
+): WaScoreResponse {
+  return {
+    records,
+    players: uniqueSorted(records.map((r) => r.player)),
     source,
   };
 }
