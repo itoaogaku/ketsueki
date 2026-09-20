@@ -12,7 +12,7 @@
  * 3-level severity bands built outward from them.
  */
 export const REFERENCE_RANGES: Record<string, { low?: number; high?: number }> = {
-  "フェリチン(Ferritin) (※フェリチン精密)": { low: 13.0, high: 277.0 },
+  "フェリチン(Ferritin) (※フェリチン精密)": { low: 9.0, high: 275.0 },
   "Hb（ヘモグロビン量）": { low: 13.5, high: 17.5 },
   "ヘマトクリット値（Hematocrit)": { low: 39.7, high: 52.4 },
   "Fe（血清鉄）": { low: 50.0, high: 200.0 },
@@ -68,9 +68,9 @@ export const SEVERITY_TIERS: Record<string, { low?: [number, number]; high?: [nu
   // for the athlete: a narrative review." Eur J Appl Physiol. 2019;
   // 119:1463-1478; AIS/ASADA iron deficiency position stand): ferritin
   // <20 ng/mL marks iron-deficient erythropoiesis (paired with low TSAT),
-  // <12 ng/mL marks iron deficiency anaemia. The team's own low=13 axis
+  // <12 ng/mL marks iron deficiency anaemia. The team's own low=9 axis
   // already sits inside that range, so both extra levels land just below it.
-  "フェリチン(Ferritin) (※フェリチン精密)": { low: [10, 6], high: [400, 600] },
+  "フェリチン(Ferritin) (※フェリチン精密)": { low: [6, 3], high: [400, 600] },
   // WHO haemoglobin anaemia grading, adult male (Hb <13.0 g/dL = anaemia;
   // 11.0-12.9 mild, 8.0-10.9 moderate, <8.0 severe). The team's axis (13.5)
   // is slightly stricter than WHO's cutoff; level 2/3 follow the WHO
