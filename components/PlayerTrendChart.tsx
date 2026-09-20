@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
-import { compareByRosterName } from "@/lib/player-roster";
+import { compareByGradeThenRosterName } from "@/lib/player-roster";
 import { REFERENCE_RANGES } from "@/lib/reference-ranges";
 import type { BloodDataResponse } from "@/lib/types";
 import { TrendLineChart, type ReferenceLineSpec } from "./TrendLineChart";
@@ -12,10 +12,20 @@ import { TrendLineChart, type ReferenceLineSpec } from "./TrendLineChart";
  * a trend crossing into red/blue territory is visible at a glance, the same
  * way the wide tables color a single out-of-range cell. */
 export function PlayerTrendChart({ bloodData }: { bloodData: BloodDataResponse }) {
-  const sortedPlayers = useMemo(
-    () => [...bloodData.players].sort(compareByRosterName),
-    [bloodData.players]
-  );
+  // Same 4年→1年・名簿順のグループ順を他の選手一覧（検査日で一覧など）に
+  // 合わせる。学年は各選手の最新の記録から拾う。
+  const sortedPlayers = useMemo(() => {
+    const latestGrade = new Map<string, (typeof bloodData.records)[number]["grade"]>();
+    for (const r of [...bloodData.records].sort((a, b) => a.date.localeCompare(b.date))) {
+      if (r.grade) latestGrade.set(r.player, r.grade);
+    }
+    return [...bloodData.players].sort((a, b) =>
+      compareByGradeThenRosterName(
+        { player: a, grade: latestGrade.get(a) },
+        { player: b, grade: latestGrade.get(b) }
+      )
+    );
+  }, [bloodData.players, bloodData.records]);
   const orderedParameters = useMemo(
     () => orderParametersByCategory(bloodData.parameters).flatMap((g) => g.params),
     [bloodData.parameters]

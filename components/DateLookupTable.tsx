@@ -2,30 +2,21 @@
 
 import { useMemo, useState } from "react";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
-import { compareByRosterName } from "@/lib/player-roster";
+import { compareByGradeThenRosterName } from "@/lib/player-roster";
 import { buildDateNormalization } from "@/lib/stats";
-import type { BloodDataResponse, BloodTestRecord, Grade } from "@/lib/types";
+import type { BloodDataResponse, BloodTestRecord } from "@/lib/types";
 import { WideTestTable } from "./WideTestTable";
 
 type SortDir = "desc" | "asc";
-
-// 4年→3年→2年→1年、学年が分からない選手（高校生など）は最後。
-const GRADE_SORT_ORDER: Grade[] = ["4年", "3年", "2年", "1年"];
-
-function gradeRank(grade: Grade | null | undefined): number {
-  if (!grade) return GRADE_SORT_ORDER.length;
-  const i = GRADE_SORT_ORDER.indexOf(grade);
-  return i === -1 ? GRADE_SORT_ORDER.length : i;
-}
 
 function byGradeThenName(
   a: { player: string; records: BloodTestRecord[] },
   b: { player: string; records: BloodTestRecord[] }
 ) {
-  const ag = gradeRank(a.records.find((r) => r.grade)?.grade);
-  const bg = gradeRank(b.records.find((r) => r.grade)?.grade);
-  if (ag !== bg) return ag - bg;
-  return compareByRosterName(a.player, b.player);
+  return compareByGradeThenRosterName(
+    { player: a.player, grade: a.records.find((r) => r.grade)?.grade },
+    { player: b.player, grade: b.records.find((r) => r.grade)?.grade }
+  );
 }
 
 /**

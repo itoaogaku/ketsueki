@@ -1,3 +1,5 @@
+import type { Grade } from "./types";
+
 /**
  * Furigana (katakana reading) for each player's kanji name, sourced from the
  * team roster spreadsheet. Used to sort players in true 名簿順 (reading
@@ -61,4 +63,26 @@ export function compareByRosterName(a: string, b: string): number {
   const readingA = PLAYER_FURIGANA[a] ?? a;
   const readingB = PLAYER_FURIGANA[b] ?? b;
   return readingA.localeCompare(readingB, "ja");
+}
+
+// 4年→3年→2年→1年、学年が分からない選手（高校生など）は最後。
+export const GRADE_SORT_ORDER: Grade[] = ["4年", "3年", "2年", "1年"];
+
+export function gradeRank(grade: Grade | null | undefined): number {
+  if (!grade) return GRADE_SORT_ORDER.length;
+  const i = GRADE_SORT_ORDER.indexOf(grade);
+  return i === -1 ? GRADE_SORT_ORDER.length : i;
+}
+
+/** Sorts by grade (4年→3年→2年→1年, unknown grade last), then by roster
+ * name order within each grade - the standard player ordering used
+ * throughout the dashboard. */
+export function compareByGradeThenRosterName(
+  a: { player: string; grade: Grade | null | undefined },
+  b: { player: string; grade: Grade | null | undefined }
+): number {
+  const ag = gradeRank(a.grade);
+  const bg = gradeRank(b.grade);
+  if (ag !== bg) return ag - bg;
+  return compareByRosterName(a.player, b.player);
 }
