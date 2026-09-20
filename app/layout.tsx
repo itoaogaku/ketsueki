@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "血液検査データ分析",
-  description: "選手の血液検査データの推移と寮別比較、試合結果との相関分析",
+  description: "選手の血液検査データの推移と寮別比較・学年別比較",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

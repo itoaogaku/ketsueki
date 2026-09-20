@@ -56,17 +56,3 @@ export interface GameResultsResponse {
   source: "notion" | "sample";
 }
 
-export interface TrendPoint {
-  period: string; // yyyy-MM
-  average: number;
-  count: number;
-  [key: string]: unknown;
-}
-
-export interface CorrelationResult {
-  parameter: string;
-  metric: string;
-  r: number | null;
-  n: number;
-  points: { x: number; y: number; player: string; date: string }[];
-}
