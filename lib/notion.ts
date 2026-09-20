@@ -169,9 +169,19 @@ function uniqueSorted(values: Iterable<string>): string[] {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ja"));
 }
 
-/** 選手名 -> 生年月日 (ISO yyyy-mm-dd) from the 部員データベース. Only players
- * registered there get a computed grade; anyone else falls back to the
- * grade hand-entered on their own blood-test row (unchanged, previous
+/** The 部員データベース and 血液検査データベース were filled in by hand at
+ * different times, so the same player's name can carry a full-width space
+ * (「村上　直弥」) in one and a half-width space (「村上 直弥」) in the other -
+ * collapsing every run of whitespace (either kind) to a single half-width
+ * space before matching means that difference doesn't break the lookup. */
+function normalizeNameForMatching(name: string): string {
+  return name.replace(/[　\s]+/g, " ").trim();
+}
+
+/** 選手名 -> 生年月日 (ISO yyyy-mm-dd) from the 部員データベース, keyed by
+ * normalized name (see normalizeNameForMatching). Only players registered
+ * there get a computed grade; anyone else falls back to the grade
+ * hand-entered on their own blood-test row (unchanged, previous
  * behaviour). */
 async function fetchMemberBirthdates(): Promise<Map<string, string>> {
   const pages = await queryAllPages(MEMBERS_DB_ID!);
@@ -181,7 +191,7 @@ async function fetchMemberBirthdates(): Promise<Map<string, string>> {
     if (!name) continue;
     for (const [propName, prop] of Object.entries(page.properties)) {
       if (prop.type === "date" && prop.date?.start && /生年月日/.test(propName)) {
-        map.set(name, prop.date.start.slice(0, 10));
+        map.set(normalizeNameForMatching(name), prop.date.start.slice(0, 10));
         break;
       }
     }
@@ -199,12 +209,13 @@ async function applyComputedGrades(records: BloodTestRecord[]): Promise<BloodTes
   const birthdates = await fetchMemberBirthdates();
   const enteringYearByPlayer = new Map<string, number>();
   return records.map((r) => {
-    const birthdate = birthdates.get(r.player);
+    const key = normalizeNameForMatching(r.player);
+    const birthdate = birthdates.get(key);
     if (!birthdate) return r;
-    let enteringYear = enteringYearByPlayer.get(r.player);
+    let enteringYear = enteringYearByPlayer.get(key);
     if (enteringYear === undefined) {
       enteringYear = enteringYearFromBirthdate(birthdate);
-      enteringYearByPlayer.set(r.player, enteringYear);
+      enteringYearByPlayer.set(key, enteringYear);
     }
     return { ...r, grade: gradeAtDate(enteringYear, r.date) };
   });
