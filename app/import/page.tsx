@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { ImportSummary } from "@/lib/import-blood-csv";
+import type { SyncWaScoresSummary } from "@/lib/sync-wa-scores";
 
 // A large CSV writes one Notion page at a time (to respect the API's rate
 // limit), which can take longer than a single serverless invocation allows.
@@ -19,6 +20,33 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [waLoading, setWaLoading] = useState(false);
+  const [waSummary, setWaSummary] = useState<SyncWaScoresSummary | null>(null);
+  const [waError, setWaError] = useState<string | null>(null);
+
+  const syncWa = async (waDryRun: boolean) => {
+    setWaLoading(true);
+    setWaError(null);
+    setWaSummary(null);
+    try {
+      const res = await fetch("/api/sync-wa-scores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: secret || undefined, dryRun: waDryRun }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setWaError(data.error ?? "同期に失敗しました");
+        return;
+      }
+      setWaSummary(data.summary);
+    } catch {
+      setWaError("通信エラーが発生しました");
+    } finally {
+      setWaLoading(false);
+    }
+  };
 
   const submit = async () => {
     if (!file) return;
@@ -219,6 +247,78 @@ export default function ImportPage() {
           )}
         </section>
       )}
+
+      <section
+        className="space-y-4 rounded-lg p-4"
+        style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}
+      >
+        <div>
+          <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
+            WAスコアの同期
+          </h2>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            競技結果データベースの標準種目（5000m・10000m・ハーフマラソン・マラソンなど）を、World
+            Athletics公式スコアリングテーブルの得点に変換し、WAスコアデータベースへ反映します（上のパスコード欄を使用）。駅伝の区間など非標準距離の結果は対象外です。
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => syncWa(true)}
+            disabled={waLoading}
+            className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+            style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}
+          >
+            {waLoading ? "処理中..." : "内容を確認（書き込まない）"}
+          </button>
+          <button
+            type="button"
+            onClick={() => syncWa(false)}
+            disabled={waLoading}
+            className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+            style={{ background: "var(--brand)", color: "#ffffff" }}
+          >
+            {waLoading ? "処理中..." : "Notionに反映"}
+          </button>
+        </div>
+
+        {waError && (
+          <div
+            className="rounded-lg p-3 text-sm"
+            style={{ background: "rgba(208, 59, 59, 0.1)", color: "var(--status-critical)" }}
+          >
+            {waError}
+          </div>
+        )}
+
+        {waSummary && (
+          <div className="space-y-1 text-sm" style={{ color: "var(--text-primary)" }}>
+            <p>
+              {waSummary.totalSourceRows}件中 {waSummary.parsedRows}件から選手名・日付・種目・結果を取得しました
+            </p>
+            <ul className="space-y-0.5">
+              <li>{waSummary.dryRun ? "作成予定" : "作成"}: {waSummary.created}件</li>
+              <li>{waSummary.dryRun ? "更新予定" : "更新"}: {waSummary.updated}件</li>
+              <li style={{ color: "var(--text-secondary)" }}>
+                対象外（非標準種目）: {waSummary.outOfScope}件 / 記録形式不明: {waSummary.unparseable}件
+              </li>
+            </ul>
+            {waSummary.warnings.length > 0 && (
+              <details>
+                <summary style={{ color: "var(--text-muted)", cursor: "pointer" }}>
+                  詳細 ({waSummary.warnings.length}件)
+                </summary>
+                <ul className="mt-1 space-y-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                  {waSummary.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
