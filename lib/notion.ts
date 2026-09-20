@@ -5,6 +5,7 @@ import { enteringYearFromBirthdate, gradeAtDate } from "./grade";
 import { normalizeNameForMatching } from "./player-roster";
 import { generateSampleBloodData, generateSampleGameResults, generateSampleWaScores } from "./sample-data";
 import { parseRaceTimeSeconds } from "./time";
+import { GRADE_OPTIONS } from "./types";
 import type {
   BloodDataResponse,
   BloodTestRecord,
@@ -115,7 +116,7 @@ function extractBloodRecord(page: PageObjectResponse): BloodTestRecord {
       if (opt === "1寮生" || opt === "2寮生") dorm = opt;
     } else if (prop.type === "select" && /学年/.test(name)) {
       const opt = prop.select?.name;
-      if (opt === "1年" || opt === "2年" || opt === "3年" || opt === "4年") grade = opt;
+      if (opt && (GRADE_OPTIONS as string[]).includes(opt)) grade = opt as Grade;
     } else if (prop.type === "number" && typeof prop.number === "number") {
       values[name] = prop.number;
     }
@@ -189,6 +190,17 @@ async function fetchMemberBirthdates(): Promise<Map<string, string>> {
  * rows don't get updated, causing the grade shown next to a player's name
  * to silently stop matching reality.
  *
+ * gradeAtDate only ever returns 1年〜4年 (or null outside that range - before
+ * enrollment, or after standard graduation), so a record whose date falls
+ * outside a matched player's 4 years keeps whatever 学年 was hand-entered on
+ * that row instead of being overwritten to null. This matters for OB who've
+ * joined an 実業団 (industrial team) after graduating - they still have a
+ * 部員データベース entry (so their birthdate is known and this function does
+ * try to compute a school-year grade for them), but their post-graduation
+ * rows are meant to carry the hand-entered "実業団" value, not lose it to a
+ * computed null. It also happens to stop it from clobbering an older
+ * "高校生" (pre-enrollment) row the same way.
+ *
  * Also returns each matched player's entering year (so a "what grade are
  * they *right now*" question can be answered directly with gradeAtDate,
  * rather than by finding their most recent test record - which reads as
@@ -227,7 +239,7 @@ function applyComputedGrades(
       enteringYearByKey.set(key, enteringYear);
     }
     enteringYearByPlayer[r.player] = enteringYear;
-    return { ...r, grade: gradeAtDate(enteringYear, r.date) };
+    return { ...r, grade: gradeAtDate(enteringYear, r.date) ?? r.grade };
   });
 
   // A graduated/inactive player simply not being in the roster database is

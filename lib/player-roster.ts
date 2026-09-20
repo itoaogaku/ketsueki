@@ -65,8 +65,8 @@ export function compareByRosterName(a: string, b: string): number {
   return readingA.localeCompare(readingB, "ja");
 }
 
-// 4年→3年→2年→1年、学年が分からない選手（高校生など）は最後。
-export const GRADE_SORT_ORDER: Grade[] = ["4年", "3年", "2年", "1年"];
+// 実業団→4年→3年→2年→1年、学年が分からない選手（高校生など）は最後。
+export const GRADE_SORT_ORDER: Grade[] = ["実業団", "4年", "3年", "2年", "1年"];
 
 export function gradeRank(grade: Grade | null | undefined): number {
   if (!grade) return GRADE_SORT_ORDER.length;

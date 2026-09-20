@@ -63,6 +63,7 @@ async function main() {
               { name: "2年", color: "blue" },
               { name: "3年", color: "yellow" },
               { name: "4年", color: "red" },
+              { name: "実業団", color: "purple" },
             ],
           },
         },

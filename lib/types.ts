@@ -2,9 +2,12 @@ export type Dorm = "1寮生" | "2寮生";
 
 export const DORM_OPTIONS: Dorm[] = ["1寮生", "2寮生"];
 
-export type Grade = "1年" | "2年" | "3年" | "4年";
+export type Grade = "1年" | "2年" | "3年" | "4年" | "実業団";
 
-export const GRADE_OPTIONS: Grade[] = ["1年", "2年", "3年", "4年"];
+// 実業団は日付から自動計算されない（卒業後、大学の学年という概念が
+// 存在しないため）- 血液検査データベースのその選手の行に手入力し、
+// lib/notion.tsのapplyComputedGradesがそれを上書きしないようにしている。
+export const GRADE_OPTIONS: Grade[] = ["実業団", "4年", "3年", "2年", "1年"];
 
 /** One blood-test record for one player on one date. */
 export interface BloodTestRecord {

@@ -57,14 +57,26 @@ export function PlayerTrendChart({
     return map;
   }, [bloodData.records, bloodData.playerEnteringYear]);
 
-  // 卒業済みの先輩の記録は除き、在校生（2023〜2026年度入学）だけを対象にする。
+  // 実業団に所属している選手（卒業済みだが「学年」に"実業団"と記録される）
+  // は、在校生でなくても対象に含める。
+  const jitsugyoudanPlayers = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of bloodData.records) {
+      if (r.grade === "実業団") set.add(r.player);
+    }
+    return set;
+  }, [bloodData.records]);
+
+  // 在校生（2023〜2026年度入学）と実業団選手だけを対象にし、それ以外の
+  // 卒業済みの先輩の記録は除く。
   const currentPlayers = useMemo(
     () =>
       bloodData.players.filter((p) => {
+        if (jitsugyoudanPlayers.has(p)) return true;
         const y = enteringYearByPlayer.get(p);
         return y !== undefined && CURRENT_STUDENT_ENTERING_YEARS.includes(y);
       }),
-    [bloodData.players, enteringYearByPlayer]
+    [bloodData.players, enteringYearByPlayer, jitsugyoudanPlayers]
   );
 
   // その選手の「今の」学年。直近の検査を受けていない選手でも学年が古いまま

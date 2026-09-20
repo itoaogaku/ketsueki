@@ -1,3 +1,4 @@
+import { GRADE_OPTIONS } from "./types";
 import type { BloodTestRecord, Grade } from "./types";
 
 /** Japanese academic year (April-March): a date in Jan-Mar belongs to the
@@ -8,15 +9,21 @@ export function academicYear(dateStr: string): number {
   return month >= 4 ? year : year - 1;
 }
 
-const GRADE_NUMBER: Record<Grade, number> = { "1年": 1, "2年": 2, "3年": 3, "4年": 4 };
+// 実業団には学年番号がない（大学の学年という概念の外側にいるため）ので
+// キーを持たせない - enteringAcademicYearはこの場合undefinedを受けて
+// nullを返す。
+const GRADE_NUMBER: Partial<Record<Grade, number>> = { "1年": 1, "2年": 2, "3年": 3, "4年": 4 };
 
 /** The academic year a player entered the university, derived from one of
  * their graded records (e.g. 3年 tested during the 2025 academic year
- * entered in 2023). null for a record with no grade (or 高校生, pre-
- * enrollment) - those don't say anything about entering year. */
+ * entered in 2023). null for a record with no grade, a grade with no
+ * associated year number (高校生・実業団), or no grade at all - those don't
+ * say anything about entering year. */
 export function enteringAcademicYear(record: BloodTestRecord): number | null {
   if (!record.grade) return null;
-  return academicYear(record.date) - (GRADE_NUMBER[record.grade] - 1);
+  const gradeNumber = GRADE_NUMBER[record.grade];
+  if (gradeNumber === undefined) return null;
+  return academicYear(record.date) - (gradeNumber - 1);
 }
 
 export interface ComparisonGroup {
@@ -174,9 +181,11 @@ export const DORM_COMPARISON_GROUPS: ComparisonGroup[] = [
   { key: "2寮生", label: "2寮生", match: (r) => r.dorm === "2寮生" },
 ];
 
-export const GRADE_COMPARISON_GROUPS: ComparisonGroup[] = ["1年", "2年", "3年", "4年"].map(
-  (g) => ({ key: g, label: g, match: (r) => r.grade === g })
-);
+export const GRADE_COMPARISON_GROUPS: ComparisonGroup[] = GRADE_OPTIONS.map((g) => ({
+  key: g,
+  label: g,
+  match: (r) => r.grade === g,
+}));
 
 function round(n: number, digits: number) {
   const f = 10 ** digits;
