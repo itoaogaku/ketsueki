@@ -1,23 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncWaScores } from "@/lib/sync-wa-scores";
+import { prepareWaScoreSync, writeWaScoreBatch, type PreparedWaRow } from "@/lib/sync-wa-scores";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+function checkSecret(body: { secret?: string }): boolean {
+  const importSecret = process.env.IMPORT_SECRET;
+  return !importSecret || body.secret === importSecret;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
 
-    const importSecret = process.env.IMPORT_SECRET;
-    if (importSecret && body.secret !== importSecret) {
+    if (!checkSecret(body)) {
       return NextResponse.json({ error: "パスコードが正しくありません" }, { status: 401 });
     }
 
-    const dryRun = body.dryRun === true;
-    const maxWrites = typeof body.maxWrites === "number" ? body.maxWrites : undefined;
-    const offset = typeof body.offset === "number" ? body.offset : undefined;
-    const summary = await syncWaScores({ dryRun, maxWrites, offset });
-    return NextResponse.json({ summary });
+    if (body.mode === "write") {
+      const rows = body.rows as PreparedWaRow[] | undefined;
+      if (!Array.isArray(rows)) {
+        return NextResponse.json({ error: "rows が指定されていません" }, { status: 400 });
+      }
+      const result = await writeWaScoreBatch(rows);
+      return NextResponse.json({ result });
+    }
+
+    // mode: "prepare" (default) - read-only, also used for the dry-run preview.
+    const result = await prepareWaScoreSync();
+    return NextResponse.json({ result });
   } catch (error) {
     console.error("Failed to sync WA scores", error);
     return NextResponse.json(

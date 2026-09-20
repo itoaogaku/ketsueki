@@ -51,7 +51,20 @@ function dedupeKey(row: { player: string; date: string; event: string }): string
   return `${row.player}__${row.date}__${row.event}`;
 }
 
-export interface SyncWaScoresSummary {
+/** One 競技結果DB row already converted to WA得点, along with whichever
+ * WAスコアDB page (if any) it should overwrite - resolved once during
+ * `prepareWaScoreSync` so `writeWaScoreBatch` never has to re-read either
+ * database to figure this out. */
+export interface PreparedWaRow {
+  player: string;
+  date: string;
+  event: string;
+  resultText: string;
+  points: number;
+  existingPageId: string | null;
+}
+
+export interface PrepareWaSyncResult {
   totalSourceRows: number;
   /** Rows with a recognized player/date/event/result to work with at all
    * (before checking whether the event is a WA-table-covered one). */
@@ -60,50 +73,27 @@ export interface SyncWaScoresSummary {
   outOfScope: number;
   /** 対象種目だが記録の形式が読み取れずスキップされた件数。 */
   unparseable: number;
-  created: number;
-  updated: number;
-  dryRun: boolean;
   warnings: string[];
-  /** true if `maxWrites` cut this call short - call again with the same
-   * arguments (passing this response's `nextOffset` back as `offset`) to
-   * continue. Always false for a dry run (dry run only counts, never writes,
-   * so there's nothing slow enough to need cutting off). */
-  hasMore: boolean;
-  /** Index into the full (recomputed every call) list of convertible rows to
-   * resume writing from on the next call - see `maxWrites` below. */
-  nextOffset: number;
+  rows: PreparedWaRow[];
 }
 
 /**
  * Reads every row of the 競技結果データベース, converts each recognized
  * standard-distance result into WA (World Athletics) Scoring Tables points
- * (see lib/wa-scoring.ts), and upserts one row per result into the WAスコア
- * database. Shared between the `npm run sync:wa-scores` CLI script and the
- * in-app `/import` page's "WAスコアを同期" button (app/api/sync-wa-scores),
- * for when running the script locally isn't convenient - mirrors how
- * lib/import-blood-csv.ts is shared the same way for the blood-test CSV
- * import.
+ * (see lib/wa-scoring.ts), and checks each one against the WAスコア
+ * database's existing rows - a read-only pass (no writes), so it's used both
+ * for a "内容を確認" dry run and as the first step of an actual sync, whose
+ * caller (writeWaScoreBatch) needs the same `rows` list to write from.
  *
- * This database holds derived data, not hand-edited data, so unlike the
- * blood-test CSV importer there's no separate create/upsert mode - every
- * matching row's WA得点 is always refreshed to the currently computed value.
- *
- * `maxWrites` caps how many pages a call actually writes (create or update)
- * before returning early (`hasMore: true`) - a large 競技結果DB can need
- * thousands of writes, one Notion page at a time with a small delay between
- * them to respect its rate limit, which runs well past a serverless
- * function's time limit. The caller (the /import page) re-invokes with the
- * same `offset` (this response's `nextOffset`) until `hasMore` is false -
- * this re-reads and re-converts the full 競技結果DB on every call (the
- * `toWrite` list isn't persisted between calls), same tradeoff
- * lib/import-blood-csv.ts makes for the same reason, simplicity over
- * avoiding the redundant reads.
+ * Doing this once and having the caller batch `rows` itself (rather than
+ * re-deriving it inside every batched write call, the way
+ * lib/import-blood-csv.ts's CSV importer re-scans its whole file every
+ * round) matters here because the source 競技結果DB is read in full every
+ * time - for a large database that's dozens of Notion API round trips, which
+ * repeated on every one of many small write batches added up to blowing
+ * past a serverless function's time limit even with few writes per batch.
  */
-export async function syncWaScores({
-  dryRun = false,
-  maxWrites,
-  offset = 0,
-}: { dryRun?: boolean; maxWrites?: number; offset?: number } = {}): Promise<SyncWaScoresSummary> {
+export async function prepareWaScoreSync(): Promise<PrepareWaSyncResult> {
   if (!isGamesNotionConfigured()) {
     throw new Error(
       "NOTION_TOKEN / NOTION_GAMES_DATABASE_ID が設定されていません（変換元の競技結果データベースが必要です）"
@@ -122,7 +112,7 @@ export async function syncWaScores({
   let outOfScope = 0;
   let unparseable = 0;
   const warnings: string[] = [];
-  const toWrite: { player: string; date: string; event: string; resultText: string; points: number }[] = [];
+  const converted: { player: string; date: string; event: string; resultText: string; points: number }[] = [];
 
   for (const row of rawRows) {
     if (!resolveWaDiscipline(row.event)) {
@@ -137,20 +127,12 @@ export async function syncWaScores({
       );
       continue;
     }
-    toWrite.push({ ...row, points: computed.points });
+    converted.push({ ...row, points: computed.points });
   }
 
-  let created = 0;
-  let updated = 0;
-  let hasMore = false;
-  let nextOffset = toWrite.length;
-
-  if (toWrite.length > 0) {
-    const notion = getNotionClient();
-    const dataSourceId = await resolveDataSourceId(waScoresDbId);
-
+  const existingKeys = new Map<string, string>();
+  if (converted.length > 0) {
     const existingPages = await queryAllPages(waScoresDbId);
-    const existingKeys = new Map<string, string>();
     for (const page of existingPages) {
       const player = getPlainTitle(page);
       let date = "";
@@ -161,59 +143,71 @@ export async function syncWaScores({
       }
       if (player && date && event) existingKeys.set(dedupeKey({ player, date, event }), page.id);
     }
-
-    if (dryRun) {
-      for (const row of toWrite) {
-        if (existingKeys.has(dedupeKey(row))) updated++;
-        else created++;
-      }
-    } else {
-      for (let i = offset; i < toWrite.length; i++) {
-        if (maxWrites !== undefined && created + updated >= maxWrites) {
-          hasMore = true;
-          nextOffset = i;
-          break;
-        }
-
-        const row = toWrite[i];
-        const key = dedupeKey(row);
-        const existingPageId = existingKeys.get(key);
-        const properties = {
-          選手名: { title: [{ text: { content: row.player } }] },
-          日付: { date: { start: row.date } },
-          競技種目: { select: { name: row.event } },
-          競技結果: { rich_text: [{ text: { content: row.resultText } }] },
-          WA得点: { number: row.points },
-        };
-
-        if (existingPageId) {
-          await notion.pages.update({
-            page_id: existingPageId,
-            properties: properties as Parameters<typeof notion.pages.update>[0]["properties"],
-          });
-          updated++;
-        } else {
-          await notion.pages.create({
-            parent: { type: "data_source_id", data_source_id: dataSourceId },
-            properties: properties as Parameters<typeof notion.pages.create>[0]["properties"],
-          });
-          created++;
-        }
-        await sleep(150); // Notionのレート制限に配慮
-      }
-    }
   }
+
+  const rows: PreparedWaRow[] = converted.map((row) => ({
+    ...row,
+    existingPageId: existingKeys.get(dedupeKey(row)) ?? null,
+  }));
 
   return {
     totalSourceRows: sourcePages.length,
     parsedRows: rawRows.length,
     outOfScope,
     unparseable,
-    created,
-    updated,
-    dryRun,
     warnings,
-    hasMore,
-    nextOffset,
+    rows,
   };
+}
+
+/**
+ * Writes one batch of already-`prepareWaScoreSync`-resolved rows to the
+ * WAスコア database (create if `existingPageId` is null, otherwise update
+ * that page) - no re-reading of either database, so the caller controls
+ * batch size purely by how many `rows` it passes, to stay under a
+ * serverless function's time limit (see app/api/sync-wa-scores/route.ts and
+ * the /import page for how the browser slices `PrepareWaSyncResult.rows`
+ * into batches across repeated calls).
+ */
+export async function writeWaScoreBatch(
+  rows: PreparedWaRow[]
+): Promise<{ created: number; updated: number }> {
+  if (!isWaScoresNotionConfigured()) {
+    throw new Error("NOTION_WA_SCORES_DATABASE_ID が設定されていません");
+  }
+  const waScoresDbId = process.env.NOTION_WA_SCORES_DATABASE_ID!;
+
+  let created = 0;
+  let updated = 0;
+  if (rows.length === 0) return { created, updated };
+
+  const notion = getNotionClient();
+  const dataSourceId = await resolveDataSourceId(waScoresDbId);
+
+  for (const row of rows) {
+    const properties = {
+      選手名: { title: [{ text: { content: row.player } }] },
+      日付: { date: { start: row.date } },
+      競技種目: { select: { name: row.event } },
+      競技結果: { rich_text: [{ text: { content: row.resultText } }] },
+      WA得点: { number: row.points },
+    };
+
+    if (row.existingPageId) {
+      await notion.pages.update({
+        page_id: row.existingPageId,
+        properties: properties as Parameters<typeof notion.pages.update>[0]["properties"],
+      });
+      updated++;
+    } else {
+      await notion.pages.create({
+        parent: { type: "data_source_id", data_source_id: dataSourceId },
+        properties: properties as Parameters<typeof notion.pages.create>[0]["properties"],
+      });
+      created++;
+    }
+    await sleep(150); // Notionのレート制限に配慮
+  }
+
+  return { created, updated };
 }

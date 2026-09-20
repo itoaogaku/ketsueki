@@ -25,24 +25,36 @@
  *      the way there is for the blood-test CSV importer).
  *      Add --dry-run to preview counts without writing anything.
  */
-import { syncWaScores } from "../lib/sync-wa-scores";
+import { prepareWaScoreSync, writeWaScoreBatch } from "../lib/sync-wa-scores";
 
 const dryRun = process.argv.includes("--dry-run");
 
 async function main() {
   console.log("競技結果データベースを読み込み、WAスコアを計算しています...");
-  const summary = await syncWaScores({ dryRun });
+  const prepared = await prepareWaScoreSync();
 
-  for (const w of summary.warnings) console.warn(`  ${w}`);
+  for (const w of prepared.warnings) console.warn(`  ${w}`);
   console.log(
-    `\n${summary.totalSourceRows}件中 ${summary.parsedRows}件から選手名・日付・種目・結果を取得しました`
+    `\n${prepared.totalSourceRows}件中 ${prepared.parsedRows}件から選手名・日付・種目・結果を取得しました`
   );
+  const toWriteCount = prepared.rows.length;
   console.log(
-    `変換結果: 対象 ${summary.created + summary.updated}件 / 対象外(非標準種目) ${summary.outOfScope}件 / 記録形式不明 ${summary.unparseable}件`
+    `変換結果: 対象 ${toWriteCount}件 / 対象外(非標準種目) ${prepared.outOfScope}件 / 記録形式不明 ${prepared.unparseable}件`
   );
+
+  if (dryRun) {
+    const created = prepared.rows.filter((r) => !r.existingPageId).length;
+    const updated = toWriteCount - created;
+    console.log(`\n--- 確認結果（未実行） ---`);
+    console.log(`作成予定: ${created}件`);
+    console.log(`更新予定: ${updated}件`);
+    return;
+  }
+
+  const { created, updated } = await writeWaScoreBatch(prepared.rows);
   console.log(`\n--- 完了 ---`);
-  console.log(`${dryRun ? "作成予定" : "作成"}: ${summary.created}件`);
-  console.log(`${dryRun ? "更新予定" : "更新"}: ${summary.updated}件`);
+  console.log(`作成: ${created}件`);
+  console.log(`更新: ${updated}件`);
 }
 
 main().catch((err) => {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { ImportSummary } from "@/lib/import-blood-csv";
-import type { SyncWaScoresSummary } from "@/lib/sync-wa-scores";
+import type { PrepareWaSyncResult, PreparedWaRow } from "@/lib/sync-wa-scores";
 
 // A large CSV writes one Notion page at a time (to respect the API's rate
 // limit), which can take longer than a single serverless invocation allows.
@@ -12,11 +12,24 @@ import type { SyncWaScoresSummary } from "@/lib/sync-wa-scores";
 // the endpoint (already-written rows are recognized and skipped) until done.
 const BATCH_SIZE = 10;
 
-// Same reasoning as BATCH_SIZE above, but larger: a WA score sync has no
-// per-row schema-detection work (no dynamically-added Number properties to
-// check/create) the way the CSV import does, just a straight write, so more
-// of them fit in one serverless invocation before hitting its time limit.
+// Same batching reasoning as BATCH_SIZE above, but larger: writing a WA
+// score batch has no per-row schema-detection work (no dynamically-added
+// Number properties to check/create) the way the CSV import does, and -
+// unlike it - doesn't re-read the whole source database on every batch (see
+// lib/sync-wa-scores.ts), so more rows fit in one serverless invocation
+// before hitting its time limit.
 const WA_BATCH_SIZE = 100;
+
+interface WaSyncDisplaySummary {
+  totalSourceRows: number;
+  parsedRows: number;
+  outOfScope: number;
+  unparseable: number;
+  warnings: string[];
+  created: number;
+  updated: number;
+  dryRun: boolean;
+}
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -28,7 +41,7 @@ export default function ImportPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [waLoading, setWaLoading] = useState(false);
-  const [waSummary, setWaSummary] = useState<SyncWaScoresSummary | null>(null);
+  const [waSummary, setWaSummary] = useState<WaSyncDisplaySummary | null>(null);
   const [waError, setWaError] = useState<string | null>(null);
 
   const syncWa = async (waDryRun: boolean) => {
@@ -36,33 +49,52 @@ export default function ImportPage() {
     setWaError(null);
     setWaSummary(null);
     try {
+      const prepareRes = await fetch("/api/sync-wa-scores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: secret || undefined, mode: "prepare" }),
+      });
+      const prepareData = await prepareRes.json();
+      if (!prepareRes.ok) {
+        setWaError(prepareData.error ?? "同期に失敗しました");
+        return;
+      }
+      const prepared: PrepareWaSyncResult = prepareData.result;
+
+      const base: Omit<WaSyncDisplaySummary, "created" | "updated"> = {
+        totalSourceRows: prepared.totalSourceRows,
+        parsedRows: prepared.parsedRows,
+        outOfScope: prepared.outOfScope,
+        unparseable: prepared.unparseable,
+        warnings: prepared.warnings,
+        dryRun: waDryRun,
+      };
+
+      if (waDryRun) {
+        const created = prepared.rows.filter((r) => !r.existingPageId).length;
+        const updated = prepared.rows.length - created;
+        setWaSummary({ ...base, created, updated });
+        return;
+      }
+
       let totalCreated = 0;
       let totalUpdated = 0;
-      let offset = 0;
-
-      for (;;) {
-        const res = await fetch("/api/sync-wa-scores", {
+      for (let i = 0; i < prepared.rows.length; i += WA_BATCH_SIZE) {
+        const batch: PreparedWaRow[] = prepared.rows.slice(i, i + WA_BATCH_SIZE);
+        const writeRes = await fetch("/api/sync-wa-scores", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            secret: secret || undefined,
-            dryRun: waDryRun,
-            ...(waDryRun ? {} : { maxWrites: WA_BATCH_SIZE, offset }),
-          }),
+          body: JSON.stringify({ secret: secret || undefined, mode: "write", rows: batch }),
         });
-        const data = await res.json();
-        if (!res.ok) {
-          setWaError(data.error ?? "同期に失敗しました");
+        const writeData = await writeRes.json();
+        if (!writeRes.ok) {
+          setWaError(writeData.error ?? "同期に失敗しました");
           return;
         }
-
-        const round: SyncWaScoresSummary = data.summary;
+        const round: { created: number; updated: number } = writeData.result;
         totalCreated += round.created;
         totalUpdated += round.updated;
-        setWaSummary({ ...round, created: totalCreated, updated: totalUpdated });
-
-        if (!round.hasMore) break;
-        offset = round.nextOffset;
+        setWaSummary({ ...base, created: totalCreated, updated: totalUpdated });
       }
     } catch {
       setWaError("通信エラーが発生しました");
