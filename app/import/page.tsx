@@ -12,6 +12,12 @@ import type { SyncWaScoresSummary } from "@/lib/sync-wa-scores";
 // the endpoint (already-written rows are recognized and skipped) until done.
 const BATCH_SIZE = 10;
 
+// Same reasoning as BATCH_SIZE above, but larger: a WA score sync has no
+// per-row schema-detection work (no dynamically-added Number properties to
+// check/create) the way the CSV import does, just a straight write, so more
+// of them fit in one serverless invocation before hitting its time limit.
+const WA_BATCH_SIZE = 100;
+
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [secret, setSecret] = useState("");
@@ -30,17 +36,34 @@ export default function ImportPage() {
     setWaError(null);
     setWaSummary(null);
     try {
-      const res = await fetch("/api/sync-wa-scores", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret: secret || undefined, dryRun: waDryRun }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setWaError(data.error ?? "同期に失敗しました");
-        return;
+      let totalCreated = 0;
+      let totalUpdated = 0;
+      let offset = 0;
+
+      for (;;) {
+        const res = await fetch("/api/sync-wa-scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret: secret || undefined,
+            dryRun: waDryRun,
+            ...(waDryRun ? {} : { maxWrites: WA_BATCH_SIZE, offset }),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setWaError(data.error ?? "同期に失敗しました");
+          return;
+        }
+
+        const round: SyncWaScoresSummary = data.summary;
+        totalCreated += round.created;
+        totalUpdated += round.updated;
+        setWaSummary({ ...round, created: totalCreated, updated: totalUpdated });
+
+        if (!round.hasMore) break;
+        offset = round.nextOffset;
       }
-      setWaSummary(data.summary);
     } catch {
       setWaError("通信エラーが発生しました");
     } finally {
@@ -279,7 +302,11 @@ export default function ImportPage() {
             className="rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
             style={{ background: "var(--brand)", color: "#ffffff" }}
           >
-            {waLoading ? "処理中..." : "Notionに反映"}
+            {waLoading
+              ? waSummary
+                ? `処理中... (${waSummary.created + waSummary.updated}件処理)`
+                : "処理中..."
+              : "Notionに反映"}
           </button>
         </div>
 

@@ -14,7 +14,9 @@ export async function POST(request: NextRequest) {
     }
 
     const dryRun = body.dryRun === true;
-    const summary = await syncWaScores({ dryRun });
+    const maxWrites = typeof body.maxWrites === "number" ? body.maxWrites : undefined;
+    const offset = typeof body.offset === "number" ? body.offset : undefined;
+    const summary = await syncWaScores({ dryRun, maxWrites, offset });
     return NextResponse.json({ summary });
   } catch (error) {
     console.error("Failed to sync WA scores", error);

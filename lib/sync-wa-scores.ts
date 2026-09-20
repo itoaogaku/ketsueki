@@ -64,6 +64,14 @@ export interface SyncWaScoresSummary {
   updated: number;
   dryRun: boolean;
   warnings: string[];
+  /** true if `maxWrites` cut this call short - call again with the same
+   * arguments (passing this response's `nextOffset` back as `offset`) to
+   * continue. Always false for a dry run (dry run only counts, never writes,
+   * so there's nothing slow enough to need cutting off). */
+  hasMore: boolean;
+  /** Index into the full (recomputed every call) list of convertible rows to
+   * resume writing from on the next call - see `maxWrites` below. */
+  nextOffset: number;
 }
 
 /**
@@ -79,10 +87,23 @@ export interface SyncWaScoresSummary {
  * This database holds derived data, not hand-edited data, so unlike the
  * blood-test CSV importer there's no separate create/upsert mode - every
  * matching row's WA得点 is always refreshed to the currently computed value.
+ *
+ * `maxWrites` caps how many pages a call actually writes (create or update)
+ * before returning early (`hasMore: true`) - a large 競技結果DB can need
+ * thousands of writes, one Notion page at a time with a small delay between
+ * them to respect its rate limit, which runs well past a serverless
+ * function's time limit. The caller (the /import page) re-invokes with the
+ * same `offset` (this response's `nextOffset`) until `hasMore` is false -
+ * this re-reads and re-converts the full 競技結果DB on every call (the
+ * `toWrite` list isn't persisted between calls), same tradeoff
+ * lib/import-blood-csv.ts makes for the same reason, simplicity over
+ * avoiding the redundant reads.
  */
 export async function syncWaScores({
   dryRun = false,
-}: { dryRun?: boolean } = {}): Promise<SyncWaScoresSummary> {
+  maxWrites,
+  offset = 0,
+}: { dryRun?: boolean; maxWrites?: number; offset?: number } = {}): Promise<SyncWaScoresSummary> {
   if (!isGamesNotionConfigured()) {
     throw new Error(
       "NOTION_TOKEN / NOTION_GAMES_DATABASE_ID が設定されていません（変換元の競技結果データベースが必要です）"
@@ -121,6 +142,8 @@ export async function syncWaScores({
 
   let created = 0;
   let updated = 0;
+  let hasMore = false;
+  let nextOffset = toWrite.length;
 
   if (toWrite.length > 0) {
     const notion = getNotionClient();
@@ -139,37 +162,45 @@ export async function syncWaScores({
       if (player && date && event) existingKeys.set(dedupeKey({ player, date, event }), page.id);
     }
 
-    for (const row of toWrite) {
-      const key = dedupeKey(row);
-      const existingPageId = existingKeys.get(key);
-      const properties = {
-        選手名: { title: [{ text: { content: row.player } }] },
-        日付: { date: { start: row.date } },
-        競技種目: { select: { name: row.event } },
-        競技結果: { rich_text: [{ text: { content: row.resultText } }] },
-        WA得点: { number: row.points },
-      };
-
-      if (dryRun) {
-        if (existingPageId) updated++;
+    if (dryRun) {
+      for (const row of toWrite) {
+        if (existingKeys.has(dedupeKey(row))) updated++;
         else created++;
-        continue;
       }
+    } else {
+      for (let i = offset; i < toWrite.length; i++) {
+        if (maxWrites !== undefined && created + updated >= maxWrites) {
+          hasMore = true;
+          nextOffset = i;
+          break;
+        }
 
-      if (existingPageId) {
-        await notion.pages.update({
-          page_id: existingPageId,
-          properties: properties as Parameters<typeof notion.pages.update>[0]["properties"],
-        });
-        updated++;
-      } else {
-        await notion.pages.create({
-          parent: { type: "data_source_id", data_source_id: dataSourceId },
-          properties: properties as Parameters<typeof notion.pages.create>[0]["properties"],
-        });
-        created++;
+        const row = toWrite[i];
+        const key = dedupeKey(row);
+        const existingPageId = existingKeys.get(key);
+        const properties = {
+          選手名: { title: [{ text: { content: row.player } }] },
+          日付: { date: { start: row.date } },
+          競技種目: { select: { name: row.event } },
+          競技結果: { rich_text: [{ text: { content: row.resultText } }] },
+          WA得点: { number: row.points },
+        };
+
+        if (existingPageId) {
+          await notion.pages.update({
+            page_id: existingPageId,
+            properties: properties as Parameters<typeof notion.pages.update>[0]["properties"],
+          });
+          updated++;
+        } else {
+          await notion.pages.create({
+            parent: { type: "data_source_id", data_source_id: dataSourceId },
+            properties: properties as Parameters<typeof notion.pages.create>[0]["properties"],
+          });
+          created++;
+        }
+        await sleep(150); // Notionのレート制限に配慮
       }
-      await sleep(150); // Notionのレート制限に配慮
     }
   }
 
@@ -182,5 +213,7 @@ export async function syncWaScores({
     updated,
     dryRun,
     warnings,
+    hasMore,
+    nextOffset,
   };
 }
