@@ -20,6 +20,30 @@ const BATCH_SIZE = 10;
 // another timeout with a larger one.
 const WA_BATCH_SIZE = 25;
 
+/** Retries a POST a few times (short backoff) on a network-level failure
+ * (fetch() itself throwing - a dropped connection, laptop sleep, etc.), not
+ * on a clean non-2xx response (e.g. a wrong passcode), which the caller
+ * already handles and retrying wouldn't fix. A WA score sync's write phase
+ * can run for many minutes across ~180 small batches, and a single dropped
+ * request used to abort the whole thing - this lets it ride out a
+ * transient blip instead of losing everything written so far. */
+async function postJsonWithRetry(body: unknown, attempts = 3): Promise<Response> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetch("/api/sync-wa-scores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 interface WaSyncDisplaySummary {
   totalSourceRows: number;
   parsedRows: number;
@@ -55,11 +79,7 @@ export default function ImportPage() {
     let totalUpdated = 0;
     let phase: "prepare" | "write" = "prepare";
     try {
-      const prepareRes = await fetch("/api/sync-wa-scores", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret: secret || undefined, mode: "prepare" }),
-      });
+      const prepareRes = await postJsonWithRetry({ secret: secret || undefined, mode: "prepare" });
       const prepareData = await prepareRes.json();
       if (!prepareRes.ok) {
         setWaError(`準備段階で失敗: ${prepareData.error ?? "不明なエラー"}`);
@@ -90,10 +110,10 @@ export default function ImportPage() {
       for (let i = 0; i < prepared.rows.length; i += WA_BATCH_SIZE) {
         const batch: PreparedWaRow[] = prepared.rows.slice(i, i + WA_BATCH_SIZE);
         setWaPhase(`書き込み中... (${totalCreated + totalUpdated}/${prepared.rows.length}件)`);
-        const writeRes = await fetch("/api/sync-wa-scores", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ secret: secret || undefined, mode: "write", rows: batch }),
+        const writeRes = await postJsonWithRetry({
+          secret: secret || undefined,
+          mode: "write",
+          rows: batch,
         });
         const writeData = await writeRes.json();
         if (!writeRes.ok) {
