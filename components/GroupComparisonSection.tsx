@@ -9,12 +9,13 @@ import type { BloodTestRecord } from "@/lib/types";
 
 const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
 
+const DEFAULT_PARAMETER = "Hb（ヘモグロビン量）";
+
 /**
- * Per-group (dorm or grade) average of one or more checked blood parameters,
- * plotted by exact test date rather than a monthly bucket. Different
- * parameters use different units, so only the first checked one drives the
- * line chart; checking more than one is meant for the table view, where
- * each checked parameter gets its own column per group.
+ * Per-group (dorm or grade) average of exactly one selected blood
+ * parameter, plotted by exact test date rather than a monthly bucket.
+ * Only one parameter can be selected at a time (picking one clears the
+ * previous pick) so the chart's single Y axis always means one thing.
  */
 export function GroupComparisonSection({
   title,
@@ -27,7 +28,9 @@ export function GroupComparisonSection({
   parameters: string[];
   groups: ComparisonGroup[];
 }) {
-  const [checked, setChecked] = useState<string[]>(parameters[0] ? [parameters[0]] : []);
+  const [selected, setSelected] = useState(
+    parameters.includes(DEFAULT_PARAMETER) ? DEFAULT_PARAMETER : (parameters[0] ?? "")
+  );
   const [showTable, setShowTable] = useState(false);
   const [showDateLog, setShowDateLog] = useState(false);
 
@@ -38,10 +41,6 @@ export function GroupComparisonSection({
     [parameters]
   );
 
-  const toggle = (p: string) => {
-    setChecked((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
-  };
-
   // A handful of players sometimes test on a make-up day (a different
   // player missed the main round and went later), which would otherwise
   // show up as its own thin, misleading data point. Treat any day with 40+
@@ -50,53 +49,22 @@ export function GroupComparisonSection({
   // by-date charts entirely (see the log table below for exactly which).
   const dateNormalization = useMemo(() => buildDateNormalization(records), [records]);
 
-  const chartParameter = checked[0] ?? "";
   const chartData = useMemo(
     () =>
-      chartParameter
-        ? computeGroupComparisonByDate(records, chartParameter, groups, dateNormalization)
+      selected
+        ? computeGroupComparisonByDate(records, selected, groups, dateNormalization)
         : [],
-    [records, chartParameter, groups, dateNormalization]
+    [records, selected, groups, dateNormalization]
   );
 
   const table = useMemo(() => {
-    if (checked.length === 0) return { columns: [], rows: [] as Record<string, unknown>[] };
-    const perParam = checked.map((p) => ({
-      parameter: p,
-      byDate: new Map(
-        computeGroupComparisonByDate(records, p, groups, dateNormalization).map((row) => [
-          row.period as string,
-          row,
-        ])
-      ),
-    }));
-    const dates = new Set<string>();
-    perParam.forEach((pp) => pp.byDate.forEach((_, date) => dates.add(date)));
-
+    if (!selected) return { columns: [], rows: [] as Record<string, unknown>[] };
     const columns = [
       { key: "period", label: "検査日" },
-      ...checked.flatMap((p) =>
-        groups.map((g) => ({
-          key: `${p}__${g.key}`,
-          label: `${p}（${g.label}）`,
-          align: "right" as const,
-        }))
-      ),
+      ...groups.map((g) => ({ key: g.key, label: `${selected}（${g.label}）`, align: "right" as const })),
     ];
-    const rows = Array.from(dates)
-      .sort()
-      .map((date) => {
-        const row: Record<string, unknown> = { period: date };
-        perParam.forEach((pp) => {
-          const match = pp.byDate.get(date);
-          groups.forEach((g) => {
-            row[`${pp.parameter}__${g.key}`] = match?.[g.key];
-          });
-        });
-        return row;
-      });
-    return { columns, rows };
-  }, [checked, records, groups, dateNormalization]);
+    return { columns, rows: chartData };
+  }, [selected, groups, chartData]);
 
   return (
     <section className="space-y-3">
@@ -116,10 +84,10 @@ export function GroupComparisonSection({
 
       <div
         className="flex flex-wrap gap-1 rounded-md p-2"
-        style={{ border: "1px solid var(--border)" }}
+        style={{ border: "1px solid var(--border)", background: "var(--surface-1)" }}
       >
         {orderedParameters.map((p) => {
-          const active = checked.includes(p);
+          const active = p === selected;
           return (
             <label
               key={p}
@@ -131,9 +99,10 @@ export function GroupComparisonSection({
               }}
             >
               <input
-                type="checkbox"
+                type="radio"
+                name={`${title}-parameter`}
                 checked={active}
-                onChange={() => toggle(p)}
+                onChange={() => setSelected(p)}
                 className="sr-only"
               />
               {p}
@@ -142,28 +111,21 @@ export function GroupComparisonSection({
         })}
       </div>
 
-      {checked.length === 0 ? (
+      {!selected ? (
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          検査項目にチェックを入れてください。
+          検査項目を選んでください。
         </p>
       ) : showTable ? (
         <DataTable columns={table.columns} rows={table.rows} />
       ) : (
-        <>
-          {checked.length > 1 && (
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              グラフには「{chartParameter}」のみ表示しています（項目ごとに単位が異なるため）。他の項目も含めて見るには「表で表示」をお使いください。
-            </p>
-          )}
-          <TrendLineChart
-            data={chartData}
-            series={groups.map((g, i) => ({
-              key: g.key,
-              label: g.label,
-              color: SERIES_COLORS[i % SERIES_COLORS.length],
-            }))}
-          />
-        </>
+        <TrendLineChart
+          data={chartData}
+          series={groups.map((g, i) => ({
+            key: g.key,
+            label: g.label,
+            color: SERIES_COLORS[i % SERIES_COLORS.length],
+          }))}
+        />
       )}
 
       <div>
