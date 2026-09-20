@@ -53,6 +53,7 @@ export default function ImportPage() {
     setWaPhase("準備中（競技結果データベースを読み込んでいます）...");
     let totalCreated = 0;
     let totalUpdated = 0;
+    let phase: "prepare" | "write" = "prepare";
     try {
       const prepareRes = await fetch("/api/sync-wa-scores", {
         method: "POST",
@@ -84,6 +85,7 @@ export default function ImportPage() {
       }
 
       setWaSummary({ ...base, created: 0, updated: 0 });
+      phase = "write";
 
       for (let i = 0; i < prepared.rows.length; i += WA_BATCH_SIZE) {
         const batch: PreparedWaRow[] = prepared.rows.slice(i, i + WA_BATCH_SIZE);
@@ -106,7 +108,10 @@ export default function ImportPage() {
         setWaSummary({ ...base, created: totalCreated, updated: totalUpdated });
       }
     } catch {
-      setWaError(`通信エラーが発生しました（${totalCreated + totalUpdated}件まで完了している可能性があります）`);
+      const phaseLabel = phase === "prepare" ? "準備段階" : "書き込み段階";
+      setWaError(
+        `通信エラーが発生しました（${phaseLabel}で発生。${totalCreated + totalUpdated}件まで書き込み完了している可能性があります）`
+      );
     } finally {
       setWaLoading(false);
       setWaPhase(null);

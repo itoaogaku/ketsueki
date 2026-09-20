@@ -81,12 +81,22 @@ async function resolvePlayerNames(
   const nameById = new Map<string, string>();
   if (relationIds.length > 0) {
     const notion = getNotionClient();
-    for (const id of relationIds) {
-      const linkedPage = await notion.pages.retrieve({ page_id: id });
-      if ("properties" in linkedPage) {
-        nameById.set(id, getPlainTitle(linkedPage as PageObjectResponse));
-      }
-      await sleep(100);
+    // There are far fewer distinct players than result rows (dozens, not
+    // thousands), so these are looked up with some concurrency rather than
+    // one at a time - sequential lookups here were adding enough time to
+    // risk the serverless function's time limit on their own, on top of the
+    // (unavoidably sequential, cursor-paginated) source database read.
+    const CONCURRENCY = 8;
+    for (let i = 0; i < relationIds.length; i += CONCURRENCY) {
+      const batch = relationIds.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        batch.map(async (id) => {
+          const linkedPage = await notion.pages.retrieve({ page_id: id });
+          if ("properties" in linkedPage) {
+            nameById.set(id, getPlainTitle(linkedPage as PageObjectResponse));
+          }
+        })
+      );
     }
   }
 
