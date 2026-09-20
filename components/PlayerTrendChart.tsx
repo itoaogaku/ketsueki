@@ -115,13 +115,15 @@ export function PlayerTrendChart({
 
   // WAスコアDBは血液検査DBとは別のNotionデータベースなので、全角/半角スペース
   // など表記ゆれが独立して起こりうる - 部員データベースとの突き合わせと同じ
-  // 正規化（normalizeNameForMatching）で選手名を突き合わせる。
+  // 正規化（normalizeNameForMatching）で選手名を突き合わせる。種目・記録も
+  // 保持しておき、グラフのツールチップに「5000m 14:28.9」のように表示する
+  // （得点だけだと何の結果か分からないため）。
   const waPointsByPlayerDate = useMemo(() => {
-    const map = new Map<string, Map<string, number>>();
+    const map = new Map<string, Map<string, { points: number; event: string; resultText: string }>>();
     for (const r of waData.records) {
       const key = normalizeNameForMatching(r.player);
       if (!map.has(key)) map.set(key, new Map());
-      map.get(key)!.set(r.date, r.points);
+      map.get(key)!.set(r.date, { points: r.points, event: r.event, resultText: r.resultText });
     }
     return map;
   }, [waData.records]);
@@ -149,9 +151,10 @@ export function PlayerTrendChart({
       for (const player of selectedPlayers) {
         const byDateForPlayer = waPointsByPlayerDate.get(normalizeNameForMatching(player));
         if (!byDateForPlayer) continue;
-        for (const [date, points] of byDateForPlayer) {
+        for (const [date, { points, event, resultText }] of byDateForPlayer) {
           if (!byDate.has(date)) byDate.set(date, { period: date });
           byDate.get(date)![player] = points;
+          byDate.get(date)![`${player}__label`] = `${event} ${resultText}`;
         }
       }
     } else {

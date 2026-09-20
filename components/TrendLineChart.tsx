@@ -92,6 +92,16 @@ export function TrendLineChart({
             color: "var(--text-primary)",
           }}
           labelStyle={{ color: "var(--text-secondary)" }}
+          formatter={(value, name, item) => {
+            // A data row can optionally carry "<seriesKey>__label" (e.g. WA
+            // score points computed from PlayerTrendChart's "競技成績" mode
+            // set "<player>__label" to "5000m 14:28.9") - shown in place of
+            // the bare number when present, so the tooltip can say what the
+            // value actually represents rather than just a point count.
+            const dataKey = typeof item.dataKey === "string" ? item.dataKey : "";
+            const label = dataKey ? (item.payload as Record<string, unknown>)?.[`${dataKey}__label`] : undefined;
+            return [typeof label === "string" ? `${label}（${value}）` : value, name];
+          }}
         />
         {series.length > 1 && (
           <Legend wrapperStyle={{ fontSize: 12, color: "var(--text-secondary)" }} />
