@@ -1,6 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
 import { classifySeverity, type Severity } from "@/lib/reference-ranges";
 import type { BloodTestRecord } from "@/lib/types";
+import { ParameterInfoModal } from "./ParameterInfoModal";
 
 // Background tint per severity level - level 1 (just past the reference
 // boundary) is a light tint, level 3 (past the severe cutoff) is a strong
@@ -42,11 +46,22 @@ const LABEL_CELL_CLASS = "sticky left-0 z-10 max-w-[7rem] truncate px-2 py-1 md:
  * group per player) and colored against each parameter's reference range.
  * Shared by every "wide" table view - the grade-view roster, a single
  * player's full history, and a single test date across every player.
+ *
+ * `showParameterInfo` makes each parameter name clickable, opening a
+ * popup that explains what it measures and why it matters for a distance
+ * runner specifically.
  */
-export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
+export function WideTestTable({
+  groups,
+  showParameterInfo = false,
+}: {
+  groups: ColumnGroup[];
+  showParameterInfo?: boolean;
+}) {
   const parameterGroups = orderParametersByCategory(
     Array.from(new Set(groups.flatMap((g) => g.records.flatMap((r) => Object.keys(r.values)))))
   );
+  const [openParameter, setOpenParameter] = useState<string | null>(null);
 
   return (
     <div
@@ -122,10 +137,18 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
         </thead>
         <tbody>
           {parameterGroups.map((group) => (
-            <RowGroup key={group.category} group={group} groups={groups} />
+            <RowGroup
+              key={group.category}
+              group={group}
+              groups={groups}
+              onParamClick={showParameterInfo ? setOpenParameter : undefined}
+            />
           ))}
         </tbody>
       </table>
+      {openParameter && (
+        <ParameterInfoModal parameter={openParameter} onClose={() => setOpenParameter(null)} />
+      )}
     </div>
   );
 }
@@ -133,9 +156,11 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
 function RowGroup({
   group,
   groups,
+  onParamClick,
 }: {
   group: { category: string; params: string[] };
   groups: ColumnGroup[];
+  onParamClick?: (param: string) => void;
 }) {
   return (
     <>
@@ -172,7 +197,27 @@ function RowGroup({
               color: "var(--text-primary)",
             }}
           >
-            {param}
+            {onParamClick ? (
+              <button
+                type="button"
+                onClick={() => onParamClick(param)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  font: "inherit",
+                  color: "inherit",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  textDecorationStyle: "dotted",
+                  textDecorationColor: "var(--text-muted)",
+                }}
+              >
+                {param}
+              </button>
+            ) : (
+              param
+            )}
           </td>
           {groups.flatMap((g) =>
             g.records.map((r) => {

@@ -167,6 +167,7 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
       ) : (
         <WideTestTable
           groups={sortedPlayers.map((p) => ({ label: p.player, records: p.records }))}
+          showParameterInfo
         />
       )}
     </section>

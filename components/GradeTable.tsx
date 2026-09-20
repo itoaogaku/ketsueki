@@ -89,6 +89,7 @@ export function GradeTable({ bloodData }: { bloodData: BloodDataResponse }) {
       ) : (
         <WideTestTable
           groups={players.map((p) => ({ label: p.player, records: p.records }))}
+          showParameterInfo
         />
       )}
     </div>
