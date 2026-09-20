@@ -4,11 +4,15 @@ import { useMemo, useState } from "react";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
 import { compareByGradeThenRosterName } from "@/lib/player-roster";
 import { REFERENCE_RANGES } from "@/lib/reference-ranges";
+import { enteringAcademicYear } from "@/lib/stats";
 import { GRADE_OPTIONS } from "@/lib/types";
 import type { BloodDataResponse, Grade } from "@/lib/types";
 import { TrendLineChart, type ReferenceLineSpec, type SeriesSpec } from "./TrendLineChart";
 
 const BASE_SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
+
+// 2023年度〜2026年度入学が在校生（卒業済みの先輩は対象外）。
+const CURRENT_STUDENT_ENTERING_YEARS = [2023, 2024, 2025, 2026];
 
 /** A distinct-ish color per selected player - cycles through the app's
  * fixed palette first, then spreads further hues for a bigger comparison
@@ -26,6 +30,20 @@ function colorForIndex(i: number): string {
  * once for a quick squad-wide comparison; individual players can still be
  * added or removed from there. */
 export function PlayerTrendChart({ bloodData }: { bloodData: BloodDataResponse }) {
+  // 卒業済みの先輩の記録は除き、在校生（2023〜2026年度入学）だけを対象にする。
+  const currentPlayers = useMemo(() => {
+    const enteringYear = new Map<string, number>();
+    for (const r of bloodData.records) {
+      if (enteringYear.has(r.player)) continue;
+      const y = enteringAcademicYear(r);
+      if (y !== null) enteringYear.set(r.player, y);
+    }
+    return bloodData.players.filter((p) => {
+      const y = enteringYear.get(p);
+      return y !== undefined && CURRENT_STUDENT_ENTERING_YEARS.includes(y);
+    });
+  }, [bloodData.players, bloodData.records]);
+
   // Same 4年→1年・名簿順のグループ順を他の選手一覧（検査日で一覧など）に
   // 合わせる。学年は各選手の最新の記録から拾う。
   const latestGrade = useMemo(() => {
@@ -38,13 +56,13 @@ export function PlayerTrendChart({ bloodData }: { bloodData: BloodDataResponse }
 
   const sortedPlayers = useMemo(
     () =>
-      [...bloodData.players].sort((a, b) =>
+      [...currentPlayers].sort((a, b) =>
         compareByGradeThenRosterName(
           { player: a, grade: latestGrade.get(a) },
           { player: b, grade: latestGrade.get(b) }
         )
       ),
-    [bloodData.players, latestGrade]
+    [currentPlayers, latestGrade]
   );
 
   const playersByGrade = useMemo(() => {

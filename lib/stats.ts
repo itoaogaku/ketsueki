@@ -3,6 +3,7 @@ import type {
   CorrelationResult,
   Dorm,
   GameResultRecord,
+  Grade,
   TrendPoint,
 } from "./types";
 
@@ -16,6 +17,17 @@ export function academicYear(dateStr: string): number {
   const year = Number(dateStr.slice(0, 4));
   const month = Number(dateStr.slice(5, 7));
   return month >= 4 ? year : year - 1;
+}
+
+const GRADE_NUMBER: Record<Grade, number> = { "1年": 1, "2年": 2, "3年": 3, "4年": 4 };
+
+/** The academic year a player entered the university, derived from one of
+ * their graded records (e.g. 3年 tested during the 2025 academic year
+ * entered in 2023). null for a record with no grade (or 高校生, pre-
+ * enrollment) - those don't say anything about entering year. */
+export function enteringAcademicYear(record: BloodTestRecord): number | null {
+  if (!record.grade) return null;
+  return academicYear(record.date) - (GRADE_NUMBER[record.grade] - 1);
 }
 
 export interface TrendFilter {
