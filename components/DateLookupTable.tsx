@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
+import { compareByRosterName } from "@/lib/player-roster";
 import { buildDateNormalization } from "@/lib/stats";
 import type { BloodDataResponse, BloodTestRecord, Grade } from "@/lib/types";
 import { WideTestTable } from "./WideTestTable";
@@ -24,7 +25,7 @@ function byGradeThenName(
   const ag = gradeRank(a.records.find((r) => r.grade)?.grade);
   const bg = gradeRank(b.records.find((r) => r.grade)?.grade);
   if (ag !== bg) return ag - bg;
-  return a.player.localeCompare(b.player, "ja");
+  return compareByRosterName(a.player, b.player);
 }
 
 /**

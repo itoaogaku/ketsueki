@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { compareByRosterName } from "@/lib/player-roster";
 import { academicYear } from "@/lib/stats";
 import { GRADE_OPTIONS } from "@/lib/types";
 import type { BloodDataResponse, Grade } from "@/lib/types";
@@ -36,7 +37,7 @@ export function GradeTable({ bloodData }: { bloodData: BloodDataResponse }) {
     }
     return Array.from(byPlayer.entries())
       .map(([player, records]) => ({ player, records }))
-      .sort((a, b) => a.player.localeCompare(b.player, "ja"));
+      .sort((a, b) => compareByRosterName(a.player, b.player));
   }, [filtered]);
 
   const totalColumns = players.reduce((s, p) => s + p.records.length, 0);
