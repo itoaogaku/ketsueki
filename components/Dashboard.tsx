@@ -9,6 +9,7 @@ import { DataTable } from "./DataTable";
 import { GradeTable } from "./GradeTable";
 import { GroupComparisonSection } from "./GroupComparisonSection";
 import { PlayerHistoryTable } from "./PlayerHistoryTable";
+import { PlayerTrendChart } from "./PlayerTrendChart";
 import { DateLookupTable } from "./DateLookupTable";
 import {
   computeAllCorrelations,
@@ -188,6 +189,8 @@ export function Dashboard({
         parameters={bloodData.parameters}
         groups={GRADE_COMPARISON_GROUPS}
       />
+
+      <PlayerTrendChart bloodData={bloodData} />
 
       {/* Correlation with game results */}
       <section className="space-y-4">
