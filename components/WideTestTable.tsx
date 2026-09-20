@@ -29,6 +29,13 @@ export interface ColumnGroup {
   records: BloodTestRecord[];
 }
 
+// Long parameter names (e.g. "フェリチン(Ferritin) (※フェリチン精密)") used to
+// size the sticky label column to fit in full, which left barely any room
+// for the actual data columns on a phone - truncate with an ellipsis
+// instead (title= gives the full name on hover) and cap the column
+// narrower on small screens, wider on desktop where there's room to spare.
+const LABEL_CELL_CLASS = "sticky left-0 z-10 max-w-[7rem] truncate px-2 py-1 md:max-w-[15rem]";
+
 /**
  * Renders blood-test parameters as sticky-first-column rows against one
  * column per record, with records clustered into labelled groups (one
@@ -69,7 +76,7 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
         <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
           <tr>
             <th
-              className="sticky left-0 z-10 px-2 py-1 text-left"
+              className={`${LABEL_CELL_CLASS} text-left`}
               style={{ background: "var(--surface-1)", borderBottom: "1px solid var(--border)" }}
             />
             {groups.map((g, i) => (
@@ -90,7 +97,7 @@ export function WideTestTable({ groups }: { groups: ColumnGroup[] }) {
           </tr>
           <tr>
             <th
-              className="sticky left-0 z-10 px-2 py-1 text-left"
+              className={`${LABEL_CELL_CLASS} text-left`}
               style={{ background: "var(--surface-1)", borderBottom: "1px solid var(--border)" }}
             >
               検査項目
@@ -134,7 +141,8 @@ function RowGroup({
     <>
       <tr>
         <td
-          className="sticky left-0 z-10 whitespace-nowrap px-2 py-1 font-medium"
+          className={`${LABEL_CELL_CLASS} font-medium`}
+          title={group.category}
           style={{
             background: "var(--background)",
             color: "var(--text-secondary)",
@@ -156,7 +164,8 @@ function RowGroup({
       {group.params.map((param) => (
         <tr key={param}>
           <td
-            className="sticky left-0 z-10 whitespace-nowrap px-2 py-1"
+            className={LABEL_CELL_CLASS}
+            title={param}
             style={{
               background: "var(--surface-1)",
               borderBottom: "1px solid var(--gridline)",
