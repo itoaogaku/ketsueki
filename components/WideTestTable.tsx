@@ -1,6 +1,27 @@
 import { orderParametersByCategory } from "@/lib/parameter-categories";
-import { classifyValue } from "@/lib/reference-ranges";
+import { classifySeverity, type Severity } from "@/lib/reference-ranges";
 import type { BloodTestRecord } from "@/lib/types";
+
+// Background tint per severity level - level 1 (just past the reference
+// boundary) is a light tint, level 3 (past the severe cutoff) is a strong
+// fill with white text for contrast.
+const SEVERITY_BG: Record<Severity["direction"], [string, string, string]> = {
+  high: ["rgba(208, 59, 59, 0.15)", "rgba(208, 59, 59, 0.38)", "rgba(208, 59, 59, 0.75)"],
+  low: ["rgba(42, 120, 214, 0.15)", "rgba(42, 120, 214, 0.38)", "rgba(42, 120, 214, 0.75)"],
+};
+
+function severityStyle(severity: Severity | null): { background?: string; color: string; fontWeight: number } {
+  if (!severity) return { color: "var(--text-primary)", fontWeight: 400 };
+  const background = SEVERITY_BG[severity.direction][severity.level - 1];
+  if (severity.level === 3) {
+    return { background, color: "#ffffff", fontWeight: 700 };
+  }
+  return {
+    background,
+    color: severity.direction === "high" ? "var(--status-critical)" : "var(--series-1)",
+    fontWeight: 600,
+  };
+}
 
 export interface ColumnGroup {
   /** Header label spanning this group's columns (a player name, typically). */
@@ -150,7 +171,7 @@ function RowGroup({
           {groups.flatMap((g) =>
             g.records.map((r) => {
               const value = r.values[param];
-              const cls = typeof value === "number" ? classifyValue(param, value) : null;
+              const severity = typeof value === "number" ? classifySeverity(param, value) : null;
               return (
                 <td
                   key={r.id}
@@ -159,13 +180,7 @@ function RowGroup({
                     borderBottom: "1px solid var(--gridline)",
                     borderLeft: "1px solid var(--gridline)",
                     fontVariantNumeric: "tabular-nums",
-                    color:
-                      cls === "high"
-                        ? "var(--status-critical)"
-                        : cls === "low"
-                          ? "var(--series-1)"
-                          : "var(--text-primary)",
-                    fontWeight: cls ? 600 : 400,
+                    ...severityStyle(severity),
                   }}
                 >
                   {value ?? ""}
