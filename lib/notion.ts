@@ -269,14 +269,11 @@ function applyComputedGrades(
 }
 
 /** Fetching every row from Notion (paginated, several round trips) gets
- * slower as the database grows, so the result is cached rather than
- * re-fetched on every page view - a fresh import shows up within that
- * window rather than instantly. 5 minutes (rather than the original 1) cuts
- * how often a visitor lands on an uncached request and has to wait out the
- * full Notion round trip themselves, since this data changes at most a few
- * times a day. This wraps the function (not the page/route) so it only runs
- * at request time, never during `next build`, which in this project's
- * sandboxed dev environment has no route to api.notion.com. */
+ * slower as the database grows, so the result is cached for a minute rather
+ * than re-fetched on every page view - a fresh import shows up within that
+ * window rather than instantly. This wraps the function (not the page/route)
+ * so it only runs at request time, never during `next build`, which in this
+ * project's sandboxed dev environment has no route to api.notion.com. */
 export const fetchBloodData = unstable_cache(
   async (): Promise<BloodDataResponse> => {
     if (!isBloodNotionConfigured()) {
@@ -305,7 +302,7 @@ export const fetchBloodData = unstable_cache(
     return buildBloodResponse(records, "notion", unmatchedGradePlayers, playerEnteringYear);
   },
   ["blood-data"],
-  { revalidate: 300 }
+  { revalidate: 60 }
 );
 
 function buildBloodResponse(
@@ -340,7 +337,7 @@ export const fetchGameResults = unstable_cache(
     return buildGameResponse(records, "notion");
   },
   ["game-results"],
-  { revalidate: 300 }
+  { revalidate: 60 }
 );
 
 function buildGameResponse(
