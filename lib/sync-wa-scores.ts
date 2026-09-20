@@ -14,19 +14,31 @@ function sleep(ms: number) {
 }
 
 interface RawResultRow {
-  player: string;
+  /** Resolved directly from a title/rich_text/people 選手 property - null
+   * when it's a relation instead, in which case `playerRelationId` names the
+   * linked page (e.g. in 部員データベース) whose own title is the player's
+   * name, resolved separately (see resolvePlayerNames) since that needs its
+   * own Notion API calls the per-row extraction here can't make. */
+  player: string | null;
+  playerRelationId: string | null;
   date: string;
   event: string;
   resultText: string;
 }
 
-/** Auto-detects the title (player), date, 種目, and 結果 columns of one
- * 競技結果DB row, whatever they're actually named - mirrors extractGameRecord
+/** Auto-detects the 選手, date, 種目, and 結果 columns of one 競技結果DB row,
+ * whatever they're actually named or typed - mirrors extractGameRecord
  * (lib/notion.ts)'s own type+name-based detection rather than assuming a
  * fixed schema, since this reads an existing database this app didn't
- * create. */
+ * create. Deliberately does NOT assume the 選手 column is the database's
+ * title property (Notion's mandatory title property here turned out to
+ * hold the competition/meet name instead, e.g. "第46回神奈川マラソン", not
+ * the athlete) - it can be a title, a plain text column, a relation to
+ * another database (e.g. 部員データベース), or a Person column, and this
+ * handles all four by property *name* instead. */
 function extractRawResultRow(page: PageObjectResponse): RawResultRow | null {
-  const player = getPlainTitle(page);
+  let player: string | null = null;
+  let playerRelationId: string | null = null;
   let date = "";
   let event = "";
   let resultText = "";
@@ -34,6 +46,14 @@ function extractRawResultRow(page: PageObjectResponse): RawResultRow | null {
   for (const [name, prop] of Object.entries(page.properties)) {
     if (prop.type === "date" && prop.date?.start) {
       date = prop.date.start.slice(0, 10);
+    } else if (/選手/.test(name)) {
+      if (prop.type === "title") player = prop.title.map((t) => t.plain_text).join("").trim();
+      else if (prop.type === "rich_text") player = prop.rich_text.map((t) => t.plain_text).join("").trim();
+      else if (prop.type === "relation" && prop.relation.length > 0) playerRelationId = prop.relation[0].id;
+      else if (prop.type === "people" && prop.people.length > 0) {
+        const person = prop.people[0];
+        player = "name" in person ? (person.name ?? null) : null;
+      }
     } else if (/種目/.test(name)) {
       if (prop.type === "select" && prop.select?.name) event = prop.select.name;
       else if (prop.type === "rich_text") event = prop.rich_text.map((t) => t.plain_text).join("");
@@ -43,8 +63,40 @@ function extractRawResultRow(page: PageObjectResponse): RawResultRow | null {
     }
   }
 
-  if (!player || !date || !event || !resultText) return null;
-  return { player, date, event, resultText };
+  if ((!player && !playerRelationId) || !date || !event || !resultText) return null;
+  return { player, playerRelationId, date, event, resultText };
+}
+
+/** Resolves each row's `playerRelationId` (a 部員データベース page id, say)
+ * to that page's own title, fetching each *distinct* linked page once
+ * (there are far fewer players than result rows) rather than once per row.
+ * Rows whose 選手 column already held a plain name need no resolution. */
+async function resolvePlayerNames(
+  rows: RawResultRow[]
+): Promise<{ player: string; date: string; event: string; resultText: string }[]> {
+  const relationIds = Array.from(
+    new Set(rows.filter((r) => r.playerRelationId).map((r) => r.playerRelationId!))
+  );
+
+  const nameById = new Map<string, string>();
+  if (relationIds.length > 0) {
+    const notion = getNotionClient();
+    for (const id of relationIds) {
+      const linkedPage = await notion.pages.retrieve({ page_id: id });
+      if ("properties" in linkedPage) {
+        nameById.set(id, getPlainTitle(linkedPage as PageObjectResponse));
+      }
+      await sleep(100);
+    }
+  }
+
+  const resolved: { player: string; date: string; event: string; resultText: string }[] = [];
+  for (const row of rows) {
+    const player = row.player ?? (row.playerRelationId ? nameById.get(row.playerRelationId) : undefined);
+    if (!player) continue; // couldn't resolve the relation - skip rather than write a blank name
+    resolved.push({ player, date: row.date, event: row.event, resultText: row.resultText });
+  }
+  return resolved;
 }
 
 function dedupeKey(row: { player: string; date: string; event: string }): string {
@@ -107,7 +159,8 @@ export async function prepareWaScoreSync(): Promise<PrepareWaSyncResult> {
   const waScoresDbId = process.env.NOTION_WA_SCORES_DATABASE_ID!;
 
   const sourcePages = await queryAllPages(process.env.NOTION_GAMES_DATABASE_ID!);
-  const rawRows = sourcePages.map(extractRawResultRow).filter((r): r is RawResultRow => r !== null);
+  const extractedRows = sourcePages.map(extractRawResultRow).filter((r): r is RawResultRow => r !== null);
+  const rawRows = await resolvePlayerNames(extractedRows);
 
   let outOfScope = 0;
   let unparseable = 0;
