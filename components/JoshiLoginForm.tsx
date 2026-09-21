@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-/** /joshi用の合言葉入力フォーム。ログインAPIが成功したらページを再読み込み
- * して、サーバー側（app/joshi/page.tsx）がセットされたCookieを見て認証済み
- * としてダッシュボードを描画し直す。 */
+/** /joshi/login用の合言葉入力フォーム。ログインAPIが成功したらCookieが
+ * セットされた状態で /joshi へ遷移する - proxy.ts がそのCookieを見て認証
+ * 済みと判断し、ダッシュボードを通す。 */
 export function JoshiLoginForm() {
+  const router = useRouter();
   const [secret, setSecret] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,7 @@ export function JoshiLoginForm() {
         setError(body?.error ?? "認証に失敗しました");
         return;
       }
-      window.location.reload();
+      router.push("/joshi");
     } catch {
       setError("通信エラーが発生しました");
     } finally {
