@@ -3,7 +3,12 @@ import type { PageObjectResponse } from "@notionhq/client/build/src/api-endpoint
 import { unstable_cache } from "next/cache";
 import { enteringYearFromBirthdate, gradeAtDate } from "./grade";
 import { normalizeNameForMatching } from "./player-roster";
-import { generateSampleBloodData, generateSampleGameResults, generateSampleWaScores } from "./sample-data";
+import {
+  generateSampleBloodData,
+  generateSampleGameResults,
+  generateSampleWaScores,
+  generateSampleWomenBloodData,
+} from "./sample-data";
 import { parseRaceTimeSeconds } from "./time";
 import { GRADE_OPTIONS } from "./types";
 import type {
@@ -19,12 +24,17 @@ import type {
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const BLOOD_DB_ID = process.env.NOTION_BLOOD_DATABASE_ID;
+const WOMEN_BLOOD_DB_ID = process.env.NOTION_WOMEN_BLOOD_DATABASE_ID;
 const GAMES_DB_ID = process.env.NOTION_GAMES_DATABASE_ID;
 const MEMBERS_DB_ID = process.env.NOTION_MEMBERS_DATABASE_ID;
 const WA_SCORES_DB_ID = process.env.NOTION_WA_SCORES_DATABASE_ID;
 
 export function isBloodNotionConfigured(): boolean {
   return Boolean(NOTION_TOKEN && BLOOD_DB_ID);
+}
+
+export function isWomenBloodNotionConfigured(): boolean {
+  return Boolean(NOTION_TOKEN && WOMEN_BLOOD_DB_ID);
 }
 
 export function isGamesNotionConfigured(): boolean {
@@ -300,6 +310,39 @@ export const fetchBloodData = unstable_cache(
   { revalidate: 60 }
 );
 
+/** 女子選手用ダッシュボード（/joshi）が読む、血液検査データ専用の別データベース
+ * - 男子用の NOTION_BLOOD_DATABASE_ID とは完全に別のNotionデータベースで、
+ * 男子側のfetchBloodDataとは行き来しない（実名・実データが男子側のページ
+ * payloadに混ざらないようにするため）。部員データベース（学年の自動計算用）
+ * は男女共通のものをそのまま使う。 */
+export const fetchWomenBloodData = unstable_cache(
+  async (): Promise<BloodDataResponse> => {
+    if (!isWomenBloodNotionConfigured()) {
+      const records = generateSampleWomenBloodData();
+      return buildBloodResponse(records, "sample");
+    }
+    const [pages, birthdates] = await Promise.all([
+      queryAllPages(WOMEN_BLOOD_DB_ID!),
+      isMembersNotionConfigured() ? fetchMemberBirthdates() : Promise.resolve(null),
+    ]);
+    let records = pages
+      .map(extractBloodRecord)
+      .filter((r) => r.date && r.player)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    let unmatchedGradePlayers: string[] | undefined;
+    let playerEnteringYear: Record<string, number> | undefined;
+    if (birthdates) {
+      const result = applyComputedGrades(records, birthdates);
+      records = result.records;
+      unmatchedGradePlayers = result.unmatchedPlayers;
+      playerEnteringYear = result.enteringYearByPlayer;
+    }
+    return buildBloodResponse(records, "notion", unmatchedGradePlayers, playerEnteringYear);
+  },
+  ["women-blood-data"],
+  { revalidate: 60 }
+);
+
 function buildBloodResponse(
   records: BloodTestRecord[],
   source: BloodDataResponse["source"],
@@ -359,10 +402,13 @@ function extractWaScoreRecord(page: PageObjectResponse): WaScoreRecord | null {
   let event = "";
   let resultText = "";
   let points: number | null = null;
+  let gender: "m" | "f" = "m";
 
   for (const [name, prop] of Object.entries(page.properties)) {
     if (prop.type === "date" && prop.date?.start) {
       date = prop.date.start.slice(0, 10);
+    } else if (prop.type === "select" && /性別/.test(name)) {
+      gender = /女/.test(prop.select?.name ?? "") ? "f" : "m";
     } else if (prop.type === "select" && /種目/.test(name)) {
       event = prop.select?.name ?? "";
     } else if (prop.type === "rich_text" && /結果/.test(name)) {
@@ -373,7 +419,7 @@ function extractWaScoreRecord(page: PageObjectResponse): WaScoreRecord | null {
   }
 
   if (!player || !date || points === null) return null;
-  return { id: page.id, player, date, event, resultText, points };
+  return { id: page.id, player, gender, date, event, resultText, points };
 }
 
 /** Reads pre-computed WA得点 rows from the WAスコア database that
@@ -407,4 +453,18 @@ function buildWaScoreResponse(
     players: uniqueSorted(records.map((r) => r.player)),
     source,
   };
+}
+
+/** fetchWaScores() reads the whole WAスコアDB (男女混在) in one cached call -
+ * this narrows it down to one gender's records for a given dashboard, so
+ * the men's/women's split happens once, server-side, right before the data
+ * is handed to a page/prop, rather than inside fetchWaScores itself (which
+ * would need a separate cache entry per gender for no real benefit, since
+ * the whole table is small and cheap to filter in memory). */
+export function filterWaScoreResponseByGender(
+  response: WaScoreResponse,
+  gender: "m" | "f"
+): WaScoreResponse {
+  const records = response.records.filter((r) => r.gender === gender);
+  return buildWaScoreResponse(records, response.source);
 }

@@ -66,6 +66,7 @@ export interface GameResultsResponse {
 export interface WaScoreRecord {
   id: string;
   player: string;
+  gender: "m" | "f";
   date: string; // ISO yyyy-mm-dd
   event: string; // 競技種目, e.g. "5000m"
   resultText: string; // 競技結果 as originally recorded, e.g. "13:47.76"

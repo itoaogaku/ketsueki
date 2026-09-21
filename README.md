@@ -40,6 +40,8 @@ NOTION_BLOOD_DATABASE_ID=（後述の手順4で作成、または既存DBのID�
 NOTION_GAMES_DATABASE_ID=（既存の試合結果DBのID）
 NOTION_MEMBERS_DATABASE_ID=（既存の部員DBのID。任意、後述）
 NOTION_WA_SCORES_DATABASE_ID=（WAスコアDBのID。任意、後述）
+NOTION_WOMEN_BLOOD_DATABASE_ID=（女子選手用の血液検査DBのID。任意、後述）
+WOMEN_DASHBOARD_SECRET=（/joshi ページを保護する合言葉。任意、後述）
 NOTION_PARENT_PAGE_ID=（新規にDBを作成する場合のみ、作成先ページのID）
 ```
 
@@ -62,7 +64,7 @@ npm run setup:notion
 | 選手名 | タイトル | 選手名 |
 | 検査日 | 日付 | 検査を実施した日 |
 | 寮 | セレクト（1寮生 / 2寮生） | **その検査を受けた時点**でどちらの寮にいたか。寮の入れ替えがあっても検査ごとに正しく記録できます |
-| 学年 | セレクト（1年 / 2年 / 3年 / 4年） | **その検査を受けた時点**の学年。学年別一覧（ダッシュボード上部）で使用します |
+| 学年 | セレクト（1年 / 2年 / 3年 / 4年 / 実業団） | **その検査を受けた時点**の学年。学年別一覧（ダッシュボード上部）で使用します |
 
 血液検査の項目（Hb、Fe、CKなど）は固定の列にせず、**CSVインポート時にNotion側へ自動追加**する方式にしています（手順5参照）。すでにNotion上に血液検査DBがある場合は、`npm run setup:notion` を実行せず、既存DBのIDを `NOTION_BLOOD_DATABASE_ID` に設定するだけで構いません。
 
@@ -168,11 +170,28 @@ http://localhost:3000 を開くと、ダッシュボードが表示されます�
 
 大学を卒業し実業団に所属している選手は、「学年」に自動計算ではなく手入力で **実業団** を設定してください（血液検査データベースの「学年」列に選択肢として用意されています）。卒業済みのため学年の自動計算対象外になりますが、「実業団」と手入力した行はそのまま保持され、学年別一覧・学年で一括選択（個人の推移）・学年別の比較のいずれにも、1年〜4年と並んで選べるようになります。
 
+## 女子選手用ダッシュボード（/joshi）について
+
+男子部員から女子選手のデータが見えないよう、女子選手用の血液検査データ・競技成績は、男子用のトップページ（`/`）とは完全に別の URL `/joshi` にのみ表示されます。
+
+- `/` （男子用）にはこのページへのリンクは一切置いていません。検索エンジンにもインデックスされないよう設定してあります。URLと合言葉を知っている人だけがアクセスできる想定です。
+- `/joshi` を開くと、まず合言葉の入力を求められます。正しい合言葉を入力すると、以降はブラウザにログイン状態が30日間保存されます（Cookie）。合言葉は `WOMEN_DASHBOARD_SECRET` 環境変数で設定してください。**未設定の場合、`/joshi` はどんな合言葉を入力しても認証されません**（＝実質アクセス不可）。
+- 認証後は、男子用と同じ構成（学年別一覧・個人の推移など）のフルダッシュボードが、女子選手のデータだけで表示されます。血液検査データは `NOTION_WOMEN_BLOOD_DATABASE_ID` に設定した、男子用（`NOTION_BLOOD_DATABASE_ID`）とは別のNotionデータベースから読み込みます（未設定の場合はサンプルデータで表示されます）。
+- 競技成績（WAスコア）は、男女共通の1つのWAスコアデータベース（`NOTION_WA_SCORES_DATABASE_ID`）を「性別」列で振り分けて使うため、女子選手用に別のデータベースを用意する必要はありません（セットアップ手順はWAスコアの節を参照）。
+- 部員データベース（`NOTION_MEMBERS_DATABASE_ID`、学年の自動計算用）も男女共通のものをそのまま使います。
+
+### セットアップ
+
+1. 女子選手用の血液検査Notionデータベースを用意します（男子用と同じ列構成: 選手名・検査日・寮・学年。`npm run setup:notion` で作成したデータベースを複製するか、同じ構成で新規作成してください）。作成したデータベースにも、忘れずにNotionインテグレーションを「コネクト」してください。
+2. 作成したデータベースのIDを `.env.local`（およびVercelの環境変数）の `NOTION_WOMEN_BLOOD_DATABASE_ID` に設定します。
+3. `WOMEN_DASHBOARD_SECRET` に、`/joshi` を保護する合言葉を任意に設定します（`IMPORT_SECRET` とは別の値を推奨）。
+4. `https://your-app.vercel.app/joshi` を開き、設定した合言葉でログインできることを確認します。
+
 ## Vercelへのデプロイ
 
 1. このリポジトリをGitHubにpushします。
 2. https://vercel.com で「Add New... → Project」からこのリポジトリをインポートします。
-3. Vercelの Project Settings → Environment Variables に、`NOTION_TOKEN` / `NOTION_BLOOD_DATABASE_ID` / `NOTION_GAMES_DATABASE_ID` / `IMPORT_SECRET` を設定します（部員データベースを使う場合は `NOTION_MEMBERS_DATABASE_ID` も、WAスコアを使う場合は `NOTION_WA_SCORES_DATABASE_ID` も。`NOTION_PARENT_PAGE_ID` はセットアップ用スクリプト専用なので本番には不要です）。`IMPORT_SECRET` は `/import` ページを保護するための任意のパスコードです（未設定だとURLを知る誰でもインポートできてしまうため、必ず設定してください）。
+3. Vercelの Project Settings → Environment Variables に、`NOTION_TOKEN` / `NOTION_BLOOD_DATABASE_ID` / `NOTION_GAMES_DATABASE_ID` / `IMPORT_SECRET` を設定します（部員データベースを使う場合は `NOTION_MEMBERS_DATABASE_ID` も、WAスコアを使う場合は `NOTION_WA_SCORES_DATABASE_ID` も、女子選手用ダッシュボードを使う場合は `NOTION_WOMEN_BLOOD_DATABASE_ID` と `WOMEN_DASHBOARD_SECRET` も設定してください。`NOTION_PARENT_PAGE_ID` はセットアップ用スクリプト専用なので本番には不要です）。`IMPORT_SECRET` は `/import` ページを保護するための任意のパスコードです（未設定だとURLを知る誰でもインポートできてしまうため、必ず設定してください）。
 4. Deployを実行します。以降はこのブランチにpushするたびに自動でデプロイされます。
 
 ## 技術構成

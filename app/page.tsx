@@ -1,5 +1,5 @@
 import { Dashboard } from "@/components/Dashboard";
-import { fetchBloodData, fetchGameResults, fetchWaScores } from "@/lib/notion";
+import { fetchBloodData, fetchGameResults, fetchWaScores, filterWaScoreResponseByGender } from "@/lib/notion";
 
 // Statically rendered and revalidated in the background every minute (ISR),
 // rather than re-run for every visitor: with the previous `force-dynamic`
@@ -23,5 +23,11 @@ export default async function Home() {
     fetchGameResults(),
     fetchWaScores(),
   ]);
-  return <Dashboard bloodData={bloodData} gameData={gameData} waData={waData} />;
+  return (
+    <Dashboard
+      bloodData={bloodData}
+      gameSource={gameData.source}
+      waData={filterWaScoreResponseByGender(waData, "m")}
+    />
+  );
 }

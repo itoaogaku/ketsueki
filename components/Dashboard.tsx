@@ -7,16 +7,27 @@ import { PlayerHistoryTable } from "./PlayerHistoryTable";
 import { PlayerTrendChart } from "./PlayerTrendChart";
 import { DateLookupTable } from "./DateLookupTable";
 import { DORM_COMPARISON_GROUPS, GRADE_COMPARISON_GROUPS } from "@/lib/stats";
-import type { BloodDataResponse, GameResultsResponse, WaScoreResponse } from "@/lib/types";
+import type { BloodDataResponse, WaScoreResponse } from "@/lib/types";
 
 export function Dashboard({
   bloodData,
-  gameData,
+  gameSource,
   waData,
+  title = "血液検査データ分析ダッシュボード",
+  description = "選手の血液検査データの推移と、1寮生・2寮生の違いを確認できます。",
+  showImportLink = true,
 }: {
   bloodData: BloodDataResponse;
-  gameData: GameResultsResponse;
+  // 試合結果データそのもの（gameData）は表示に使う部分（source）だけをここで
+  // 渡す - Server Componentからこのクライアントコンポーネントへのpropは
+  // まるごとRSCペイロードとしてブラウザに送られるため、gameData全体を渡すと
+  // 実際は画面に出さない全選手・男女混在の競技結果まで誰でもdevtoolsで見えて
+  // しまう（/joshiで男女を分けた意味がなくなる）。
+  gameSource: "notion" | "sample";
   waData: WaScoreResponse;
+  title?: string;
+  description?: string;
+  showImportLink?: boolean;
 }) {
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 px-4 py-8">
@@ -24,21 +35,23 @@ export function Dashboard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              血液検査データ分析ダッシュボード
+              {title}
             </h1>
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              選手の血液検査データの推移と、1寮生・2寮生の違いを確認できます。
+              {description}
             </p>
           </div>
-          <Link
-            href="/import"
-            className="rounded px-3 py-2 text-sm font-medium"
-            style={{ background: "var(--brand)", color: "#ffffff" }}
-          >
-            CSVインポート
-          </Link>
+          {showImportLink && (
+            <Link
+              href="/import"
+              className="rounded px-3 py-2 text-sm font-medium"
+              style={{ background: "var(--brand)", color: "#ffffff" }}
+            >
+              CSVインポート
+            </Link>
+          )}
         </div>
-        <SourceBadge blood={bloodData.source} games={gameData.source} wa={waData.source} />
+        <SourceBadge blood={bloodData.source} games={gameSource} wa={waData.source} />
         {bloodData.unmatchedGradePlayers && bloodData.unmatchedGradePlayers.length > 0 && (
           <UnmatchedGradeWarning players={bloodData.unmatchedGradePlayers} />
         )}

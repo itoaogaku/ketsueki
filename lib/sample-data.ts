@@ -38,6 +38,7 @@ interface PlayerProfile {
   name: string;
   dorm: Dorm;
   grade: Grade;
+  gender: "m" | "f";
   baseHb: number;
   baseFe: number;
   baseCK: number;
@@ -55,6 +56,9 @@ function buildPlayers(gaussian: ReturnType<typeof makeGaussian>): PlayerProfile[
       name: `${name}選手`,
       dorm,
       grade: GRADES[i % GRADES.length],
+      // サンプルデータのみの都合上の割り当て（実データの男女比とは無関係）-
+      // 男子・女子どちらのダッシュボードのデモにも同じ生成関数を使えるように。
+      gender: i % 2 === 0 ? "m" : "f",
       baseHb: gaussian(14.6 + dormBoost * 0.5, 0.6),
       baseFe: gaussian(95 + dormBoost * 15, 15),
       baseCK: gaussian(280 - dormBoost * 40, 40),
@@ -64,13 +68,8 @@ function buildPlayers(gaussian: ReturnType<typeof makeGaussian>): PlayerProfile[
   });
 }
 
-let cachedBloodData: BloodTestRecord[] | null = null;
-
-export function generateSampleBloodData(): BloodTestRecord[] {
-  if (cachedBloodData) return cachedBloodData;
-
+function buildSampleBloodRecords(players: PlayerProfile[], idPrefix: string): BloodTestRecord[] {
   const gaussian = makeGaussian(20260101);
-  const players = buildPlayers(gaussian);
   const records: BloodTestRecord[] = [];
   let id = 1;
   for (const p of players) {
@@ -78,7 +77,7 @@ export function generateSampleBloodData(): BloodTestRecord[] {
       // Mild within-season drift + noise per player per month.
       const fatigue = Math.sin(mIdx / 1.5) * 10;
       records.push({
-        id: `sample-${id++}`,
+        id: `${idPrefix}-${id++}`,
         player: p.name,
         date: `${month}-15`,
         dorm: p.dorm,
@@ -96,8 +95,28 @@ export function generateSampleBloodData(): BloodTestRecord[] {
       });
     });
   }
-  cachedBloodData = records;
   return records;
+}
+
+let cachedBloodData: BloodTestRecord[] | null = null;
+
+export function generateSampleBloodData(): BloodTestRecord[] {
+  if (cachedBloodData) return cachedBloodData;
+  const players = buildPlayers(makeGaussian(20260101));
+  cachedBloodData = buildSampleBloodRecords(players, "sample");
+  return cachedBloodData;
+}
+
+let cachedWomenBloodData: BloodTestRecord[] | null = null;
+
+/** 女子選手用ダッシュボード（/joshi）がNotion未接続のときのフォールバック。
+ * 同じ生成ロジックを女子選手のみに絞って使う（実際のチームの男女比とは
+ * 無関係で、あくまでデモ表示用）。 */
+export function generateSampleWomenBloodData(): BloodTestRecord[] {
+  if (cachedWomenBloodData) return cachedWomenBloodData;
+  const players = buildPlayers(makeGaussian(20260101)).filter((p) => p.gender === "f");
+  cachedWomenBloodData = buildSampleBloodRecords(players, "sample-w");
+  return cachedWomenBloodData;
 }
 
 let cachedGameResults: GameResultRecord[] | null = null;
@@ -155,11 +174,12 @@ export function generateSampleWaScores(): WaScoreRecord[] {
       const pick = WA_SAMPLE_EVENTS[(SURNAMES.indexOf(p.name.replace("選手", "")) + mIdx) % WA_SAMPLE_EVENTS.length];
       const seconds = Math.max(1, gaussian(pick.baseSeconds - fitness, 8));
       const resultText = formatRaceTime(seconds);
-      const computed = computeWaPoints(pick.event, resultText);
+      const computed = computeWaPoints(pick.event, resultText, p.gender);
       if (!computed) return; // shouldn't happen for these known-good events
       records.push({
         id: `sample-wa-${id++}`,
         player: p.name,
+        gender: p.gender,
         date: `${month}-20`,
         event: pick.event,
         resultText,
