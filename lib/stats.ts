@@ -57,11 +57,13 @@ export interface DateNormalization {
  *   2022-04-26 (1 player) is 8 days out, just past the automatic ±7-day
  *   window, so it's named explicitly.
  * - 2023-07-24 (30 players) fell just under the 40-player anchor threshold.
+ * - 2026-05-10 / 2026-07-04 are the女子選手用ダッシュボード（/joshi）の基準日 -
+ *   女子チームは人数が少なく、40人という閾値に自動で届かないため。
  * Naming a date here promotes it to an anchor even under the threshold, and
  * every other date within `windowDays` still folds into it automatically -
  * so 2022-04-19〜23 don't need to be listed, only the explicit 04-26.
  */
-export const MANUAL_ANCHOR_DATES = ["2022-04-18", "2023-07-24"];
+export const MANUAL_ANCHOR_DATES = ["2022-04-18", "2023-07-24", "2026-05-10", "2026-07-04"];
 export const MANUAL_DATE_MERGES: Record<string, string> = {
   "2022-04-26": "2022-04-18",
 };
