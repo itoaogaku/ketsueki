@@ -58,6 +58,7 @@ interface WaSyncDisplaySummary {
 
 export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
+  const [target, setTarget] = useState<"men" | "women">("men");
   const [secret, setSecret] = useState("");
   const [dryRun, setDryRun] = useState(true);
   const [upsert, setUpsert] = useState(false);
@@ -171,6 +172,7 @@ export default function ImportPage() {
         formData.append("file", file);
         formData.append("dryRun", String(dryRun));
         formData.append("mode", upsert ? "upsert" : "create");
+        formData.append("target", target);
         if (secret) formData.append("secret", secret);
         if (!dryRun) {
           formData.append("maxCreate", String(BATCH_SIZE));
@@ -244,6 +246,32 @@ export default function ImportPage() {
             className="block w-full text-sm"
             style={{ color: "var(--text-primary)" }}
           />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            インポート先
+          </label>
+          <div className="flex gap-4 text-sm" style={{ color: "var(--text-secondary)" }}>
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="target"
+                checked={target === "men"}
+                onChange={() => setTarget("men")}
+              />
+              男子用データベース（実業団を含む）
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="target"
+                checked={target === "women"}
+                onChange={() => setTarget("women")}
+              />
+              女子用データベース（/joshi）
+            </label>
+          </div>
         </div>
 
         <div className="space-y-1">

@@ -17,6 +17,9 @@
  *   npm run import:csv -- data/blood-data.csv --dry-run   (preview only)
  *   npm run import:csv -- data/blood-data.csv --upsert    (also overwrite
  *     already-imported rows with this CSV's values, e.g. to backfill 学年)
+ *   npm run import:csv -- data/blood-data.csv --target women   (write to
+ *     NOTION_WOMEN_BLOOD_DATABASE_ID instead of NOTION_BLOOD_DATABASE_ID -
+ *     default is "men", which is also where 実業団 rows belong)
  *
  * The same logic is also available from the deployed app itself at
  * /import (a browser upload page), for when running this locally isn't
@@ -28,11 +31,13 @@ import { importBloodCsv } from "../lib/import-blood-csv";
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const mode = args.includes("--upsert") ? "upsert" : "create";
-const csvPath = args.find((a) => !a.startsWith("--")) ?? "data/blood-data.csv";
+const targetIdx = args.indexOf("--target");
+const target = targetIdx !== -1 && args[targetIdx + 1] === "women" ? "women" : "men";
+const csvPath = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--target") ?? "data/blood-data.csv";
 
 async function main() {
   const csvText = readFileSync(csvPath, "utf-8");
-  const summary = await importBloodCsv(csvText, { dryRun, mode });
+  const summary = await importBloodCsv(csvText, { dryRun, mode, target });
 
   console.log(`検査項目として扱う列: ${summary.paramColumns.join(", ")}`);
   if (summary.addedProperties.length > 0) {

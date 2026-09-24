@@ -117,6 +117,11 @@ function buildProperties(
  * used to backfill columns (e.g. 学年) onto rows a previous import already
  * created without them.
  *
+ * `target: "men"` (default) writes to NOTION_BLOOD_DATABASE_ID - this also
+ * covers 実業団 rows, since they live in the same database as the men's
+ * university players (just a different 学年 value). `target: "women"`
+ * writes to the separate NOTION_WOMEN_BLOOD_DATABASE_ID that /joshi reads.
+ *
  * `maxCreate` caps how many pages this call will actually write (create or
  * update) before returning early (`hasMore: true`) - a large CSV writes one
  * page at a time with a small delay between them to respect Notion's rate
@@ -133,10 +138,28 @@ export async function importBloodCsv(
     mode = "create",
     maxCreate,
     offset = 0,
-  }: { dryRun?: boolean; mode?: "create" | "upsert"; maxCreate?: number; offset?: number } = {}
+    target = "men",
+  }: {
+    dryRun?: boolean;
+    mode?: "create" | "upsert";
+    maxCreate?: number;
+    offset?: number;
+    /** Which blood-test database this CSV writes to - "men" (default,
+     * NOTION_BLOOD_DATABASE_ID) also holds 実業団 rows (they're just a
+     * different 学年 in the same database), while "women" targets the
+     * separate NOTION_WOMEN_BLOOD_DATABASE_ID used by the /joshi dashboard. */
+    target?: "men" | "women";
+  } = {}
 ): Promise<ImportSummary> {
-  const bloodDbId = process.env.NOTION_BLOOD_DATABASE_ID;
-  if (!bloodDbId) throw new Error("NOTION_BLOOD_DATABASE_ID が設定されていません");
+  const bloodDbId =
+    target === "women" ? process.env.NOTION_WOMEN_BLOOD_DATABASE_ID : process.env.NOTION_BLOOD_DATABASE_ID;
+  if (!bloodDbId) {
+    throw new Error(
+      target === "women"
+        ? "NOTION_WOMEN_BLOOD_DATABASE_ID が設定されていません"
+        : "NOTION_BLOOD_DATABASE_ID が設定されていません"
+    );
+  }
 
   const parsed = Papa.parse<Record<string, string>>(csvText, {
     header: true,
