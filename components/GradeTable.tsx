@@ -7,7 +7,13 @@ import { GRADE_OPTIONS } from "@/lib/types";
 import type { BloodDataResponse, Grade } from "@/lib/types";
 import { WideTestTable } from "./WideTestTable";
 
-export function GradeTable({ bloodData }: { bloodData: BloodDataResponse }) {
+export function GradeTable({
+  bloodData,
+  gender = "m",
+}: {
+  bloodData: BloodDataResponse;
+  gender?: "m" | "f";
+}) {
   const gradedRecords = useMemo(
     () => bloodData.records.filter((r) => r.grade !== null),
     [bloodData.records]
@@ -90,6 +96,7 @@ export function GradeTable({ bloodData }: { bloodData: BloodDataResponse }) {
         <WideTestTable
           groups={players.map((p) => ({ label: p.player, records: p.records }))}
           showParameterInfo
+          gender={gender}
         />
       )}
     </div>

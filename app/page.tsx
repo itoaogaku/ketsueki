@@ -28,6 +28,7 @@ export default async function Home() {
       bloodData={bloodData}
       gameSource={gameData.source}
       waData={filterWaScoreResponseByGender(waData, "m")}
+      gender="m"
     />
   );
 }

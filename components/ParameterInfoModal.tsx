@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { PARAMETER_INFO } from "@/lib/parameter-info";
-import { REFERENCE_RANGES } from "@/lib/reference-ranges";
+import { getReferenceRange } from "@/lib/reference-ranges";
 
 function formatRange(low?: number, high?: number): string | null {
   if (low !== undefined && high !== undefined) return `${low}〜${high}`;
@@ -18,9 +18,11 @@ function formatRange(low?: number, high?: number): string | null {
 export function ParameterInfoModal({
   parameter,
   onClose,
+  gender = "m",
 }: {
   parameter: string;
   onClose: () => void;
+  gender?: "m" | "f";
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -31,7 +33,7 @@ export function ParameterInfoModal({
   }, [onClose]);
 
   const info = PARAMETER_INFO[parameter];
-  const range = REFERENCE_RANGES[parameter];
+  const range = getReferenceRange(parameter, gender);
   const rangeText = range ? formatRange(range.low, range.high) : null;
 
   return (

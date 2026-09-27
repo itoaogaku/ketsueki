@@ -16,6 +16,7 @@ export function Dashboard({
   title = "血液検査データ分析ダッシュボード",
   description = "選手の血液検査データの推移と、1寮生・2寮生の違いを確認できます。",
   showImportLink = true,
+  gender = "m",
 }: {
   bloodData: BloodDataResponse;
   // 試合結果データそのもの（gameData）は表示に使う部分（source）だけをここで
@@ -28,6 +29,9 @@ export function Dashboard({
   title?: string;
   description?: string;
   showImportLink?: boolean;
+  /** 基準値の色分け（赤=高値・青=低値）にどちらの基準値表を使うか。
+   * "f" で /joshi用の女性基準値（REFERENCE_RANGES_FEMALE）に切り替わる。 */
+  gender?: "m" | "f";
 }) {
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 px-4 py-8">
@@ -62,14 +66,14 @@ export function Dashboard({
         <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
           学年別一覧
         </h2>
-        <GradeTable bloodData={bloodData} />
+        <GradeTable bloodData={bloodData} gender={gender} />
       </section>
 
-      <PlayerHistoryTable bloodData={bloodData} />
+      <PlayerHistoryTable bloodData={bloodData} gender={gender} />
 
-      <DateLookupTable bloodData={bloodData} />
+      <DateLookupTable bloodData={bloodData} gender={gender} />
 
-      <PlayerTrendChart bloodData={bloodData} waData={waData} />
+      <PlayerTrendChart bloodData={bloodData} waData={waData} gender={gender} />
 
       {/* 1寮生 vs 2寮生, by exact test date */}
       <GroupComparisonSection

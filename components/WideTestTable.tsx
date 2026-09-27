@@ -54,9 +54,11 @@ const LABEL_CELL_CLASS = "sticky left-0 z-10 max-w-[7rem] truncate px-2 py-1 md:
 export function WideTestTable({
   groups,
   showParameterInfo = false,
+  gender = "m",
 }: {
   groups: ColumnGroup[];
   showParameterInfo?: boolean;
+  gender?: "m" | "f";
 }) {
   const parameterGroups = orderParametersByCategory(
     Array.from(new Set(groups.flatMap((g) => g.records.flatMap((r) => Object.keys(r.values)))))
@@ -142,12 +144,17 @@ export function WideTestTable({
               group={group}
               groups={groups}
               onParamClick={showParameterInfo ? setOpenParameter : undefined}
+              gender={gender}
             />
           ))}
         </tbody>
       </table>
       {openParameter && (
-        <ParameterInfoModal parameter={openParameter} onClose={() => setOpenParameter(null)} />
+        <ParameterInfoModal
+          parameter={openParameter}
+          onClose={() => setOpenParameter(null)}
+          gender={gender}
+        />
       )}
     </div>
   );
@@ -157,10 +164,12 @@ function RowGroup({
   group,
   groups,
   onParamClick,
+  gender,
 }: {
   group: { category: string; params: string[] };
   groups: ColumnGroup[];
   onParamClick?: (param: string) => void;
+  gender: "m" | "f";
 }) {
   return (
     <>
@@ -222,7 +231,7 @@ function RowGroup({
           {groups.flatMap((g) =>
             g.records.map((r) => {
               const value = r.values[param];
-              const severity = typeof value === "number" ? classifySeverity(param, value) : null;
+              const severity = typeof value === "number" ? classifySeverity(param, value, gender) : null;
               return (
                 <td
                   key={r.id}

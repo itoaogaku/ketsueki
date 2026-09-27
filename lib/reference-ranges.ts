@@ -133,6 +133,83 @@ export const SEVERITY_TIERS: Record<string, { low?: [number, number]; high?: [nu
   トランスフェリン: { low: [170, 150], high: [330, 360] },
 };
 
+export type Gender = "m" | "f";
+
+/**
+ * Female-specific reference ranges, from the same source spreadsheet as
+ * REFERENCE_RANGES above (its 基準値(F) column) - used for the /joshi
+ * dashboard instead of REFERENCE_RANGES so a女子選手's values are colored
+ * against a female reference rather than the men's-team one.
+ *
+ * A handful of items had no 基準値(F) entry in that source (blank column).
+ * For those, the general clinical convention is followed instead of
+ * inventing a number:
+ * - 尿酸 (uric acid): women's normal serum urate runs lower than men's due
+ *   to oestrogen's uricosuric effect - 2.4-6.0 mg/dL is the commonly cited
+ *   adult-female range (vs. the men's-team's own 3.0-7.0).
+ * - 赤血球数 (RBC count): also sex-differentiated in most Japanese lab
+ *   references - 380-480万/μL is the commonly cited adult-female range
+ *   (vs. the men's-team's own 430-570), consistent with the Hb/Hct rows
+ *   above which already differ by sex in the same source sheet.
+ * - Everything else left blank in the source (亜鉛, ビタミンD, 白血球数,
+ *   血小板数, and the WBC differential: Neutro/Baso/Eosino/Lympho/Mono)
+ *   isn't conventionally reported as sex-specific by most labs, so the
+ *   men's-team figure is reused as the generally-accepted unisex range
+ *   rather than left uncolored.
+ */
+export const REFERENCE_RANGES_FEMALE: Record<string, { low?: number; high?: number }> = {
+  "フェリチン(Ferritin) (※フェリチン精密)": { low: 4.0, high: 80.0 },
+  "Hb（ヘモグロビン量）": { low: 11.5, high: 15.0 },
+  "ヘマトクリット値（Hematocrit)": { low: 34.8, high: 45.0 },
+  "Fe（血清鉄）": { low: 40.0, high: 180.0 },
+  "UIBC(不飽和鉄結合能)": { low: 108.0, high: 325.0 },
+  "TIBC(総鉄結合能)": { low: 270.0, high: 440.0 },
+  "TSAT(トランスフェリン飽和度）": { low: 0.2, high: 0.3 },
+  "MCV（平均赤血球容積）": { low: 85.0, high: 102.0 },
+  "MCH（平均赤血球血色素量）": { low: 28.0, high: 34.0 },
+  "MCHC（平均赤血球血色素濃度）": { low: 30.2, high: 35.1 },
+  "網赤血球数": { low: 4.0, high: 19.0 },
+  "CK（クレアチンキナーゼ）": { low: 40.0, high: 150.0 },
+  "BUN（尿素窒素）": { low: 8.0, high: 20.0 },
+  "コルチゾール（Cortisol）": { low: 3.7, high: 19.4 },
+  "GOT/AST": { low: 10.0, high: 40.0 },
+  "Cr（クレアチ二ン）": { low: 0.47, high: 0.79 },
+  "K（カリウム）": { low: 3.5, high: 5.0 },
+  "Na（血清ナトリウム）": { low: 137.0, high: 147.0 },
+  "Cl（血清クロール）": { low: 98.0, high: 108.0 },
+  尿酸: { low: 2.4, high: 6.0 }, // 一般的な女性の基準値（資料に記載なし）
+  "ALP(アルカリホスファターゼ）": { low: 100.0, high: 325.0 },
+  "Ca(血清カルシウム)": { low: 8.4, high: 10.4 },
+  "LDH（乳酸脱水素酵素）": { low: 120.0, high: 240.0 },
+  総蛋白: { low: 6.7, high: 8.3 },
+  テストステロン: { low: 1.5, high: 4.9 },
+  亜鉛: { low: 80.0, high: 130.0 }, // 資料に記載なし、男子と同じ一般値を使用
+  ビタミンD: { low: 30.0 }, // 資料に記載なし、男子と同じ一般値を使用
+  白血球数: { low: 40.0, high: 80.0 }, // 資料に記載なし、男子と同じ一般値を使用
+  赤血球数: { low: 380.0, high: 480.0 }, // 一般的な女性の基準値（資料に記載なし）
+  血小板数: { low: 12.0, high: 40.0 }, // 資料に記載なし、男子と同じ一般値を使用
+  Neutro: { low: 42.0, high: 73.0 }, // 資料に記載なし、男子と同じ一般値を使用
+  Baso: { low: 0.0, high: 2.0 }, // 資料に記載なし、男子と同じ一般値を使用
+  Eosino: { low: 0.0, high: 6.0 }, // 資料に記載なし、男子と同じ一般値を使用
+  Lympho: { low: 18.0, high: 59.0 }, // 資料に記載なし、男子と同じ一般値を使用
+  Mono: { low: 0.0, high: 8.0 }, // 資料に記載なし、男子と同じ一般値を使用
+};
+
+function rangesFor(gender: Gender): Record<string, { low?: number; high?: number }> {
+  return gender === "f" ? REFERENCE_RANGES_FEMALE : REFERENCE_RANGES;
+}
+
+/** REFERENCE_RANGES or REFERENCE_RANGES_FEMALE, by gender - used wherever a
+ * component needs to show/draw the reference boundary itself rather than
+ * just classify one value against it (e.g. PlayerTrendChart's reference
+ * lines, ParameterInfoModal's "基準値" text). */
+export function getReferenceRange(
+  paramName: string,
+  gender: Gender = "m"
+): { low?: number; high?: number } | undefined {
+  return rangesFor(gender)[paramName];
+}
+
 export type SeverityDirection = "high" | "low";
 
 export interface Severity {
@@ -142,20 +219,51 @@ export interface Severity {
 }
 
 /** "high" (red), "low" (blue), or null if within range / no reference known. */
-export function classifyValue(paramName: string, value: number): SeverityDirection | null {
-  const range = REFERENCE_RANGES[paramName];
+export function classifyValue(paramName: string, value: number, gender: Gender = "m"): SeverityDirection | null {
+  const range = rangesFor(gender)[paramName];
   if (!range) return null;
   if (range.high !== undefined && value > range.high) return "high";
   if (range.low !== undefined && value < range.low) return "low";
   return null;
 }
 
+/** SEVERITY_TIERS's moderate/severe cutoffs are absolute numbers built
+ * around the men's-team base range (e.g. Hb's [12.0, 11.0] only makes sense
+ * next to the men's low=13.5 - taken as-is next to the women's low=11.5,
+ * 12.0 would sit *above* the women's own base boundary and every below-range
+ * value would jump straight to level 2, skipping level 1 entirely). Rather
+ * than inventing female-specific moderate/severe cutoffs with no clinical
+ * source to back them, this rescales the men's tier proportionally onto the
+ * women's base boundary - preserving "how far past the base boundary, as a
+ * fraction of the boundary itself" rather than the men's absolute numbers. */
+function femaleTierBound(maleBase: number, maleTierBound: number, femaleBase: number): number {
+  if (maleBase === 0) return femaleBase;
+  return (maleTierBound / maleBase) * femaleBase;
+}
+
+function tierFor(
+  paramName: string,
+  direction: SeverityDirection,
+  gender: Gender
+): [number, number] | undefined {
+  const maleTier = SEVERITY_TIERS[paramName]?.[direction];
+  if (!maleTier) return undefined;
+  if (gender === "m") return maleTier;
+
+  const maleBase = REFERENCE_RANGES[paramName]?.[direction === "high" ? "high" : "low"];
+  const femaleBase = REFERENCE_RANGES_FEMALE[paramName]?.[direction === "high" ? "high" : "low"];
+  if (maleBase === undefined || femaleBase === undefined) return undefined;
+
+  const [moderate, severe] = maleTier;
+  return [femaleTierBound(maleBase, moderate, femaleBase), femaleTierBound(maleBase, severe, femaleBase)];
+}
+
 /** Same as classifyValue, but also grades how far out of range the value is. */
-export function classifySeverity(paramName: string, value: number): Severity | null {
-  const direction = classifyValue(paramName, value);
+export function classifySeverity(paramName: string, value: number, gender: Gender = "m"): Severity | null {
+  const direction = classifyValue(paramName, value, gender);
   if (!direction) return null;
 
-  const tier = SEVERITY_TIERS[paramName]?.[direction];
+  const tier = tierFor(paramName, direction, gender);
   if (!tier) return { direction, level: 1 };
 
   const [moderate, severe] = tier;

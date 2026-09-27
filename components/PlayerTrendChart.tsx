@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { gradeAtDate } from "@/lib/grade";
 import { orderParametersByCategory } from "@/lib/parameter-categories";
 import { compareByGradeThenRosterName, normalizeNameForMatching } from "@/lib/player-roster";
-import { REFERENCE_RANGES } from "@/lib/reference-ranges";
+import { getReferenceRange } from "@/lib/reference-ranges";
 import { enteringAcademicYear } from "@/lib/stats";
 import { GRADE_OPTIONS } from "@/lib/types";
 import type { BloodDataResponse, Grade, WaScoreResponse } from "@/lib/types";
@@ -37,9 +37,11 @@ function colorForIndex(i: number): string {
 export function PlayerTrendChart({
   bloodData,
   waData,
+  gender = "m",
 }: {
   bloodData: BloodDataResponse;
   waData: WaScoreResponse;
+  gender?: "m" | "f";
 }) {
   // 各選手の入学年度。部員データベースで一致した選手はサーバー側で生年月日
   // から計算済みの値を使い、一致しなかった選手は血液検査データベースの
@@ -192,7 +194,7 @@ export function PlayerTrendChart({
   );
 
   const referenceLines = useMemo<ReferenceLineSpec[]>(() => {
-    const range = REFERENCE_RANGES[parameter];
+    const range = getReferenceRange(parameter, gender);
     if (!range) return [];
     const lines: ReferenceLineSpec[] = [];
     if (range.high !== undefined) {
@@ -202,7 +204,7 @@ export function PlayerTrendChart({
       lines.push({ value: range.low, label: `基準値下限 ${range.low}`, color: "var(--series-1)" });
     }
     return lines;
-  }, [parameter]);
+  }, [parameter, gender]);
 
   return (
     <section className="space-y-3">

@@ -7,7 +7,13 @@ import { WideTestTable } from "./WideTestTable";
 /** Search a player by (partial) name and see every test they've ever had,
  * across all dates, in one wide table - the single-player equivalent of the
  * grade-view roster. */
-export function PlayerHistoryTable({ bloodData }: { bloodData: BloodDataResponse }) {
+export function PlayerHistoryTable({
+  bloodData,
+  gender = "m",
+}: {
+  bloodData: BloodDataResponse;
+  gender?: "m" | "f";
+}) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -92,7 +98,7 @@ export function PlayerHistoryTable({ bloodData }: { bloodData: BloodDataResponse
               検査データがありません。
             </p>
           ) : (
-            <WideTestTable groups={[{ label: selected, records }]} />
+            <WideTestTable groups={[{ label: selected, records }]} gender={gender} />
           )}
         </div>
       )}

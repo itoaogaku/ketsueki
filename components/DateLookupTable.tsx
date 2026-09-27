@@ -30,7 +30,13 @@ function byGradeThenName(
  * aren't listed separately; a day that stands entirely on its own (not a
  * 基準日 and not close enough to one) is kept as its own selectable entry.
  */
-export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse }) {
+export function DateLookupTable({
+  bloodData,
+  gender = "m",
+}: {
+  bloodData: BloodDataResponse;
+  gender?: "m" | "f";
+}) {
   const dateNormalization = useMemo(
     () => buildDateNormalization(bloodData.records),
     [bloodData.records]
@@ -168,6 +174,7 @@ export function DateLookupTable({ bloodData }: { bloodData: BloodDataResponse })
         <WideTestTable
           groups={sortedPlayers.map((p) => ({ label: p.player, records: p.records }))}
           showParameterInfo
+          gender={gender}
         />
       )}
     </section>

@@ -28,6 +28,7 @@ export default async function JoshiPage() {
       title="女子選手用ダッシュボード"
       description="女子選手の血液検査データの推移を確認できます。"
       showImportLink={false}
+      gender="f"
     />
   );
 }
