@@ -19,7 +19,7 @@ export function GradeTable({ bloodData }: { bloodData: BloodDataResponse }) {
   }, [gradedRecords]);
 
   const [year, setYear] = useState<number | null>(availableYears[0] ?? null);
-  const [grade, setGrade] = useState<Grade>("4年");
+  const [grade, setGrade] = useState<Grade>("1年");
 
   const filtered = useMemo(
     () =>
