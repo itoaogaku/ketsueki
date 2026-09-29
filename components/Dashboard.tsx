@@ -7,7 +7,17 @@ import { PlayerHistoryTable } from "./PlayerHistoryTable";
 import { PlayerTrendChart } from "./PlayerTrendChart";
 import { DateLookupTable } from "./DateLookupTable";
 import { DORM_COMPARISON_GROUPS, GRADE_COMPARISON_GROUPS } from "@/lib/stats";
+import { GRADE_OPTIONS } from "@/lib/types";
 import type { BloodDataResponse, WaScoreResponse } from "@/lib/types";
+
+// 女子チームには実業団・寮の区分がない。
+const WOMEN_GRADE_OPTIONS = GRADE_OPTIONS.filter((g) => g !== "実業団");
+const WOMEN_GRADE_COMPARISON_GROUPS = GRADE_COMPARISON_GROUPS.filter((g) => g.key !== "実業団");
+
+// 検査日の「基準日」判定は男子の人数（1回40人以上）を前提にしているため、
+// 人数の少ない女子チームでは2人以上受けた日を基準日として扱う。そうしないと
+// 全日程が基準日から外れ、日付ごとの比較グラフから落ちてしまう。
+const WOMEN_ANCHOR_MIN_PLAYERS = 2;
 
 export function Dashboard({
   bloodData,
@@ -33,6 +43,11 @@ export function Dashboard({
    * "f" で /joshi用の女性基準値（REFERENCE_RANGES_FEMALE）に切り替わる。 */
   gender?: "m" | "f";
 }) {
+  const isWomen = gender === "f";
+  const gradeOptions = isWomen ? WOMEN_GRADE_OPTIONS : GRADE_OPTIONS;
+  const gradeGroups = isWomen ? WOMEN_GRADE_COMPARISON_GROUPS : GRADE_COMPARISON_GROUPS;
+  const anchorMinPlayers = isWomen ? WOMEN_ANCHOR_MIN_PLAYERS : undefined;
+
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl space-y-8 px-4 py-8">
       <header className="space-y-1">
@@ -66,29 +81,37 @@ export function Dashboard({
         <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>
           学年別一覧
         </h2>
-        <GradeTable bloodData={bloodData} gender={gender} />
+        <GradeTable bloodData={bloodData} gender={gender} gradeOptions={gradeOptions} />
       </section>
 
       <PlayerHistoryTable bloodData={bloodData} gender={gender} />
 
-      <DateLookupTable bloodData={bloodData} gender={gender} />
+      <DateLookupTable bloodData={bloodData} gender={gender} anchorMinPlayers={anchorMinPlayers} />
 
-      <PlayerTrendChart bloodData={bloodData} waData={waData} gender={gender} />
+      <PlayerTrendChart
+        bloodData={bloodData}
+        waData={waData}
+        gender={gender}
+        gradeOptions={gradeOptions}
+      />
 
       {/* 1寮生 vs 2寮生, by exact test date */}
-      <GroupComparisonSection
-        title="1寮生・2寮生の比較（検査日ごと）"
-        records={bloodData.records}
-        parameters={bloodData.parameters}
-        groups={DORM_COMPARISON_GROUPS}
-      />
+      {!isWomen && (
+        <GroupComparisonSection
+          title="1寮生・2寮生の比較（検査日ごと）"
+          records={bloodData.records}
+          parameters={bloodData.parameters}
+          groups={DORM_COMPARISON_GROUPS}
+        />
+      )}
 
       {/* Grade comparison, by exact test date */}
       <GroupComparisonSection
         title="学年別の比較（検査日ごと）"
         records={bloodData.records}
         parameters={bloodData.parameters}
-        groups={GRADE_COMPARISON_GROUPS}
+        groups={gradeGroups}
+        anchorMinPlayers={anchorMinPlayers}
       />
     </div>
   );

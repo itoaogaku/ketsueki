@@ -33,13 +33,15 @@ function byGradeThenName(
 export function DateLookupTable({
   bloodData,
   gender = "m",
+  anchorMinPlayers,
 }: {
   bloodData: BloodDataResponse;
   gender?: "m" | "f";
+  anchorMinPlayers?: number;
 }) {
   const dateNormalization = useMemo(
-    () => buildDateNormalization(bloodData.records),
-    [bloodData.records]
+    () => buildDateNormalization(bloodData.records, { anchorMinPlayers }),
+    [bloodData.records, anchorMinPlayers]
   );
 
   const selectableDates = useMemo(

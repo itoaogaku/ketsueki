@@ -10,9 +10,11 @@ import { WideTestTable } from "./WideTestTable";
 export function GradeTable({
   bloodData,
   gender = "m",
+  gradeOptions = GRADE_OPTIONS,
 }: {
   bloodData: BloodDataResponse;
   gender?: "m" | "f";
+  gradeOptions?: Grade[];
 }) {
   const gradedRecords = useMemo(
     () => bloodData.records.filter((r) => r.grade !== null),
@@ -74,7 +76,7 @@ export function GradeTable({
         </Field>
         <Field label="学年">
           <select className="select" value={grade} onChange={(e) => setGrade(e.target.value as Grade)}>
-            {GRADE_OPTIONS.map((g) => (
+            {gradeOptions.map((g) => (
               <option key={g} value={g}>
                 {g}
               </option>

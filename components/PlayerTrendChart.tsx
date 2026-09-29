@@ -38,10 +38,12 @@ export function PlayerTrendChart({
   bloodData,
   waData,
   gender = "m",
+  gradeOptions = GRADE_OPTIONS,
 }: {
   bloodData: BloodDataResponse;
   waData: WaScoreResponse;
   gender?: "m" | "f";
+  gradeOptions?: Grade[];
 }) {
   // 各選手の入学年度。部員データベースで一致した選手はサーバー側で生年月日
   // から計算済みの値を使い、一致しなかった選手は血液検査データベースの
@@ -229,7 +231,7 @@ export function PlayerTrendChart({
         </Field>
         <Field label="学年で一括選択">
           <div className="flex gap-1">
-            {GRADE_OPTIONS.map((g) => (
+            {gradeOptions.map((g) => (
               <button
                 key={g}
                 type="button"

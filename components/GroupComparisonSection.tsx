@@ -7,7 +7,13 @@ import { buildDateNormalization, computeGroupComparisonByDate, type ComparisonGr
 import { orderParametersByCategory } from "@/lib/parameter-categories";
 import type { BloodTestRecord } from "@/lib/types";
 
-const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)"];
+const SERIES_COLORS = [
+  "var(--series-1)",
+  "var(--series-2)",
+  "var(--series-3)",
+  "var(--series-4)",
+  "var(--series-5)",
+];
 
 const DEFAULT_PARAMETER = "Hb（ヘモグロビン量）";
 
@@ -22,11 +28,13 @@ export function GroupComparisonSection({
   records,
   parameters,
   groups,
+  anchorMinPlayers,
 }: {
   title: string;
   records: BloodTestRecord[];
   parameters: string[];
   groups: ComparisonGroup[];
+  anchorMinPlayers?: number;
 }) {
   const [selected, setSelected] = useState(
     parameters.includes(DEFAULT_PARAMETER) ? DEFAULT_PARAMETER : (parameters[0] ?? "")
@@ -44,10 +52,14 @@ export function GroupComparisonSection({
   // A handful of players sometimes test on a make-up day (a different
   // player missed the main round and went later), which would otherwise
   // show up as its own thin, misleading data point. Treat any day with 40+
-  // players tested as a "main round" and fold any other day within a week
+  // players tested (or `anchorMinPlayers`, for a smaller squad) as a "main
+  // round" and fold any other day within a week
   // of one into it; days further out than that are dropped from these
   // by-date charts entirely (see the log table below for exactly which).
-  const dateNormalization = useMemo(() => buildDateNormalization(records), [records]);
+  const dateNormalization = useMemo(
+    () => buildDateNormalization(records, { anchorMinPlayers }),
+    [records, anchorMinPlayers]
+  );
 
   const chartData = useMemo(
     () =>
