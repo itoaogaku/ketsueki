@@ -65,8 +65,8 @@ export function compareByRosterName(a: string, b: string): number {
   return readingA.localeCompare(readingB, "ja");
 }
 
-// 実業団→4年→3年→2年→1年、学年が分からない選手（高校生など）は最後。
-export const GRADE_SORT_ORDER: Grade[] = ["実業団", "4年", "3年", "2年", "1年"];
+// 4年→3年→2年→1年→実業団、学年が分からない選手（高校生など）は最後。
+export const GRADE_SORT_ORDER: Grade[] = ["4年", "3年", "2年", "1年", "実業団"];
 
 export function gradeRank(grade: Grade | null | undefined): number {
   if (!grade) return GRADE_SORT_ORDER.length;
@@ -74,7 +74,7 @@ export function gradeRank(grade: Grade | null | undefined): number {
   return i === -1 ? GRADE_SORT_ORDER.length : i;
 }
 
-/** Sorts by grade (4年→3年→2年→1年, unknown grade last), then by roster
+/** Sorts by grade (4年→3年→2年→1年→実業団, unknown grade last), then by roster
  * name order within each grade - the standard player ordering used
  * throughout the dashboard. */
 export function compareByGradeThenRosterName(
