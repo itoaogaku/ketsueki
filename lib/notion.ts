@@ -262,10 +262,17 @@ function applyComputedGrades(
   const daysBetween = (a: string, b: string) =>
     Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 86_400_000;
   const newestOverallDate = records.reduce((max, r) => (r.date > max ? r.date : max), "");
+  // 実業団には青学OBでない選手もいて、部員データベースに載っていないのが
+  // 正常なので警告の対象外（学年は手入力の「実業団」をそのまま使う）。
+  const jitsugyoudanPlayers = new Set(
+    records.filter((r) => r.grade === "実業団").map((r) => r.player)
+  );
   const unmatchedPlayers = uniqueSorted(
     Array.from(latestUnmatchedDate.entries())
       .filter(
-        ([, date]) => daysBetween(date, newestOverallDate) <= UNMATCHED_RECENCY_WINDOW_DAYS
+        ([player, date]) =>
+          !jitsugyoudanPlayers.has(player) &&
+          daysBetween(date, newestOverallDate) <= UNMATCHED_RECENCY_WINDOW_DAYS
       )
       .map(([player]) => player)
   );
