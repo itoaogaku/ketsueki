@@ -27,5 +27,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/joshi"],
+  // /joshi/login はここに含めない（含めるとログイン画面自体へリダイレクトし続ける）。
+  matcher: ["/joshi", "/joshi/import"],
 };

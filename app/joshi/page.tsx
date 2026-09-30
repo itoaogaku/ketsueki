@@ -27,7 +27,7 @@ export default async function JoshiPage() {
       waData={filterWaScoreResponseByGender(waData, "f")}
       title="女子選手用ダッシュボード"
       description="女子選手の血液検査データの推移を確認できます。"
-      showImportLink={false}
+      importHref="/joshi/import"
       gender="f"
     />
   );

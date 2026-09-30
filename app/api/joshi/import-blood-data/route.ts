@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importBloodCsv } from "@/lib/import-blood-csv";
+import { JOSHI_COOKIE_NAME, joshiSessionToken } from "@/lib/joshi-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+/** 女子用血液検査DB（NOTION_WOMEN_BLOOD_DATABASE_ID）へのCSVインポート。
+ * /joshi の合言葉でログイン済み（proxy.ts と同じCookie）でなければ拒否する -
+ * 男子側の /import や /api/import-blood-data からは女子用DBに書き込めない。 */
 export async function POST(request: NextRequest) {
   try {
+    const token = joshiSessionToken();
+    if (!token || request.cookies.get(JOSHI_COOKIE_NAME)?.value !== token) {
+      return NextResponse.json({ error: "女子用ページにログインしてください" }, { status: 401 });
+    }
+
     const formData = await request.formData();
 
     const importSecret = process.env.IMPORT_SECRET;
@@ -25,12 +34,10 @@ export async function POST(request: NextRequest) {
     const offsetRaw = formData.get("offset");
     const offset = typeof offsetRaw === "string" ? Number(offsetRaw) : undefined;
     const csvText = await file.text();
-    // 男子用DB固定。女子用DBへの取り込みは合言葉で守られた
-    // /api/joshi/import-blood-data からのみ行える。
-    const summary = await importBloodCsv(csvText, { dryRun, mode, maxCreate, offset, target: "men" });
+    const summary = await importBloodCsv(csvText, { dryRun, mode, maxCreate, offset, target: "women" });
     return NextResponse.json({ summary });
   } catch (error) {
-    console.error("Failed to import blood-test CSV", error);
+    console.error("Failed to import women's blood-test CSV", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "unknown error" },
       { status: 500 }

@@ -25,7 +25,7 @@ export function Dashboard({
   waData,
   title = "血液検査データ分析ダッシュボード",
   description = "選手の血液検査データの推移と、1寮生・2寮生の違いを確認できます。",
-  showImportLink = true,
+  importHref = "/import",
   gender = "m",
 }: {
   bloodData: BloodDataResponse;
@@ -38,7 +38,8 @@ export function Dashboard({
   waData: WaScoreResponse;
   title?: string;
   description?: string;
-  showImportLink?: boolean;
+  /** CSVインポートページへのリンク先（男子: /import、女子: /joshi/import）。 */
+  importHref?: string;
   /** 基準値の色分け（赤=高値・青=低値）にどちらの基準値表を使うか。
    * "f" で /joshi用の女性基準値（REFERENCE_RANGES_FEMALE）に切り替わる。 */
   gender?: "m" | "f";
@@ -60,9 +61,9 @@ export function Dashboard({
               {description}
             </p>
           </div>
-          {showImportLink && (
+          {importHref && (
             <Link
-              href="/import"
+              href={importHref}
               className="rounded px-3 py-2 text-sm font-medium"
               style={{ background: "var(--brand)", color: "#ffffff" }}
             >
